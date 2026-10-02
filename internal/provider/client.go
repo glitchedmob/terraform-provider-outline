@@ -11,6 +11,7 @@ import (
 	"unicode"
 
 	"github.com/glitchedmob/terraform-provider-outline/internal/client"
+	"golang.org/x/time/rate"
 )
 
 const maxTimeoutSeconds = int64((1<<63 - 1) / time.Second)
@@ -19,6 +20,7 @@ const maxTimeoutSeconds = int64((1<<63 - 1) / time.Second)
 type apiClient struct {
 	*client.ClientWithResponses
 	baseURL    string
+	apiKey     string
 	httpClient *http.Client
 }
 
@@ -58,6 +60,7 @@ func newAPIClient(baseURL, apiKey string, timeoutSeconds int64, version string) 
 			host:      parsedURL.Host,
 			apiKey:    apiKey,
 			userAgent: "terraform-provider-outline/" + version,
+			limiter:   rate.NewLimiter(rate.Limit(5), 1),
 		},
 		// Do not forward bearer tokens through redirects, even on the same host.
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
@@ -70,6 +73,7 @@ func newAPIClient(baseURL, apiKey string, timeoutSeconds int64, version string) 
 	return &apiClient{
 		ClientWithResponses: generated,
 		baseURL:             baseURL,
+		apiKey:              apiKey,
 		httpClient:          httpClient,
 	}, nil
 }
@@ -80,11 +84,18 @@ type bearerTransport struct {
 	host      string
 	apiKey    string
 	userAgent string
+	limiter   *rate.Limiter
 }
 
 func (t *bearerTransport) RoundTrip(request *http.Request) (*http.Response, error) {
 	if request.URL.Scheme != t.scheme || request.URL.Host != t.host {
 		return nil, errors.New("refusing to send Outline API credentials to a different origin")
+	}
+	// Pace all requests without replaying writes. Wait honors context cancellation.
+	if t.limiter != nil {
+		if err := t.limiter.Wait(request.Context()); err != nil {
+			return nil, err
+		}
 	}
 	// A RoundTripper must not modify the caller's request or headers.
 	cloned := request.Clone(request.Context())

@@ -30,4 +30,8 @@ lint:
 test:
 	go test -v -cover ./...
 
-.PHONY: default build generate check-generated generate-docs validate-docs fmt fmt-check lint test
+# Docker and Terraform are required. Override OUTLINE_VERSION to investigate another release.
+testacc:
+	DOCKER_HOST="$${DOCKER_HOST:-$$(docker context inspect --format '{{.Endpoints.docker.Host}}')}" TF_ACC=1 go test -count=1 -v -timeout 15m -artifacts -outputdir="$(CURDIR)" ./internal/provider -run '^TestAcc'
+
+.PHONY: default build generate check-generated generate-docs validate-docs fmt fmt-check lint test testacc

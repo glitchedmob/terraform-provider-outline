@@ -7,7 +7,12 @@ description: |-
 
 # Outline provider
 
-The Outline provider configures access to the Outline HTTP API for hosted and self-hosted instances. This initial scaffold has no resources or data sources.
+The Outline provider manages manually maintained groups through the Outline HTTP API. It also looks up existing groups by UUID or exact name. The API contracts target Outline 1.10.1 only; compatibility with other releases is not claimed.
+
+## Resources and data sources
+
+- [Group resource](https://registry.terraform.io/providers/glitchedmob/outline/latest/docs/resources/group), manages manual groups and rejects externally synchronized groups
+- [Group data source](https://registry.terraform.io/providers/glitchedmob/outline/latest/docs/data-sources/group), reads by UUID or exact, case-sensitive name
 
 ## Example usage
 
@@ -43,7 +48,7 @@ The key is required. Explicit attributes override their environment variables, i
 
 The provider sends the API key as `Authorization: Bearer <api_key>` and marks `api_key` sensitive. Use HTTPS outside local development. Sensitive values still need protection in Terraform configuration and saved artifacts.
 
-Configuration validates local values and creates an HTTP client. It makes no API calls and does not verify server availability, permissions, or the key. Future resources will make requests through this client. Requests time out after 30 seconds by default; set `timeout_seconds` to change this. The client does not follow redirects or send credentials to another origin.
+Configuration validates local values and creates an HTTP client. It makes no API calls and does not verify server availability, permissions, or the key. Resources and data sources make requests through this client. Requests time out after 30 seconds by default; set `timeout_seconds` to change this. The client does not follow redirects or send credentials to another origin.
 
 This provider is not published to the Terraform Registry yet. The example uses the intended source address for this repository.
 

@@ -49,8 +49,8 @@ func TestProviderSchema(t *testing.T) {
 	if !ok || !timeout.Optional || timeout.Required || timeout.Sensitive || len(timeout.Validators) != 1 || timeout.MarkdownDescription == "" {
 		t.Fatalf("unexpected timeout_seconds schema: %v", timeout)
 	}
-	if len(p.Resources(t.Context())) != 0 || len(p.DataSources(t.Context())) != 0 {
-		t.Fatal("the scaffold must not register resources or data sources")
+	if len(p.Resources(t.Context())) != 1 || len(p.DataSources(t.Context())) != 1 {
+		t.Fatal("expected the group resource and data source")
 	}
 }
 

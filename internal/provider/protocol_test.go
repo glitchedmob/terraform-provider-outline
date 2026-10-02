@@ -23,8 +23,8 @@ func TestProtocol6Schema(t *testing.T) {
 	if len(response.Diagnostics) != 0 || response.Provider == nil || response.Provider.Block == nil {
 		t.Fatalf("unexpected protocol schema response: %v", response)
 	}
-	if len(response.ResourceSchemas) != 0 || len(response.DataSourceSchemas) != 0 || len(response.Functions) != 0 || len(response.EphemeralResourceSchemas) != 0 {
-		t.Fatal("the scaffold must expose only provider configuration")
+	if len(response.ResourceSchemas) != 1 || response.ResourceSchemas["outline_group"] == nil || len(response.DataSourceSchemas) != 1 || response.DataSourceSchemas["outline_group"] == nil || len(response.Functions) != 0 || len(response.EphemeralResourceSchemas) != 0 {
+		t.Fatal("expected only the group resource and data source")
 	}
 	if len(response.Provider.Block.Attributes) != 3 {
 		t.Fatal("expected three protocol provider attributes")

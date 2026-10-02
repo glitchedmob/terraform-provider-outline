@@ -1,0 +1,41 @@
+name: Acceptance tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  acceptance:
+    name: Outline ${{ matrix.outline-version }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        outline-version:
+          - "1.10.1"
+    env:
+      OUTLINE_VERSION: ${{ matrix.outline-version }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.14.7"
+          terraform_wrapper: false
+      - run: make testacc
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: outline-${{ matrix.outline-version }}-logs
+          path: _artifacts
+          if-no-files-found: ignore
