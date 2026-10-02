@@ -1,0 +1,39 @@
+package: client
+generate:
+  models: true
+  client: true
+output: internal/client/client.gen.go
+output-options:
+  nullable-type: true
+  include-operation-ids:
+    - authInfo
+    - usersList
+    - usersInfo
+    - usersInvite
+    - usersUpdateRole
+    - usersSuspend
+    - usersActivate
+    - usersDelete
+    - groupsList
+    - groupsInfo
+    - groupsCreate
+    - groupsUpdate
+    - groupsDelete
+    - groupsMemberships
+    - groupsAddUser
+    - groupsRemoveUser
+    - groupsUpdateUser
+    - collectionsList
+    - collectionsInfo
+    - collectionsCreate
+    - collectionsUpdate
+    - collectionsDelete
+    - collectionsMemberships
+    - collectionsAddUser
+    - collectionsRemoveUser
+    - collectionsGroupMemberships
+    - collectionsAddGroup
+    - collectionsRemoveGroup
+  overlay:
+    path: openapi/outline.overlay.yaml
+    strict: true

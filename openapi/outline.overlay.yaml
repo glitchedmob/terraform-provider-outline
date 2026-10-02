@@ -1,0 +1,182 @@
+overlay: 1.0.0
+info:
+  title: Outline v1.10.1 IAM client corrections
+  version: 1.0.0
+actions:
+  - target: $.components.schemas.Permission.enum
+    remove: true
+  - target: $.components.schemas.Permission
+    description: shared/types.ts CollectionPermission and DocumentPermission include admin.
+    update:
+      enum: [read, read_write, admin]
+      x-enum-varnames: [PermissionRead, PermissionReadWrite, PermissionAdmin]
+  - target: $.components.schemas.UserRole
+    update:
+      x-enum-varnames: [UserRoleAdmin, UserRoleMember, UserRoleViewer, UserRoleGuest]
+  - target: $.components.schemas.Pagination
+    description: Integer request parameters; shared/constants.ts caps limit at 100.
+    update:
+      properties:
+        offset: {type: integer, minimum: 0}
+        limit: {type: integer, minimum: 1, maximum: 100}
+  - target: $.components.schemas
+    description: Response metadata is not a request body. GroupUser is not a collection GroupMembership.
+    update:
+      PaginationResponse:
+        type: object
+        properties:
+          offset: {type: integer, minimum: 0}
+          limit: {type: integer, minimum: 1, maximum: 100}
+          total: {type: integer, minimum: 0}
+          nextPath: {type: string}
+      GroupPermission:
+        type: string
+        enum: [member, admin]
+        x-enum-varnames: [GroupPermissionMember, GroupPermissionAdmin]
+      GroupUser:
+        type: object
+        properties:
+          id: {type: string, description: 'Composite userId-groupId, not a UUID.'}
+          userId: {type: string, format: uuid}
+          groupId: {type: string, format: uuid}
+          permission: {$ref: '#/components/schemas/GroupPermission'}
+          user: {$ref: '#/components/schemas/User'}
+      CollectionSort:
+        type: object
+        required: [field, direction]
+        properties:
+          field: {type: string, enum: [title, index]}
+          direction: {type: string, enum: [asc, desc]}
+      TemplateManagementPermission:
+        type: string
+        enum: [admin, read_write]
+        x-enum-varnames: [TemplateManagementAdmin, TemplateManagementReadWrite]
+  - target: $.paths.*.post.responses['200'].content['application/json'].schema.properties.pagination
+    description: The server returns total and nextPath as well as offset and limit.
+    update:
+      $ref: '#/components/schemas/PaginationResponse'
+  - target: $.paths['/auth.info','/users.list','/users.info','/users.invite','/users.update_role','/users.suspend','/users.activate','/users.delete','/groups.list','/groups.info','/groups.create','/groups.update','/groups.delete','/groups.memberships','/groups.add_user','/groups.remove_user','/groups.update_user','/collections.list','/collections.info','/collections.create','/collections.update','/collections.delete','/collections.memberships','/collections.add_user','/collections.remove_user','/collections.group_memberships','/collections.add_group','/collections.remove_group'].post.responses['200'].content['application/json'].schema.properties
+    description: apiResponse.ts adds ok and status to every JSON response; success is only present on some mutations.
+    update:
+      ok: {type: boolean}
+      status: {type: integer}
+  - target: $.components.schemas.Error.properties.status
+    update:
+      type: integer
+  - target: $.components.responses.RateLimited.content['application/json'].schema.properties.status
+    update:
+      type: integer
+  - target: $.components.schemas.Group.properties.memberCount
+    update:
+      type: integer
+  - target: $.components.schemas.User.properties['avatarUrl','email']
+    description: presentUser can return null for these fields. Email can also be omitted.
+    update:
+      nullable: true
+  - target: $.components.schemas.Invite
+    description: UsersInviteSchema requires all three fields.
+    update:
+      required: [name, email, role]
+  - target: $.paths['/users.list'].post.requestBody.content['application/json'].schema.allOf[2].properties
+    update:
+      ids: {type: array, items: {type: string, format: uuid}, deprecated: true}
+  - target: $.paths['/users.invite'].post.responses['200'].content['application/json'].schema.properties.data.properties
+    description: userInviter returns existing invitations separately and does not return their users.
+    update:
+      unsent: {type: array, items: {$ref: '#/components/schemas/Invite'}}
+  - target: $.paths['/groups.create'].post.requestBody.content['application/json'].schema.properties.description
+    description: v1.10.1 validates description but the create handler drops it. Set it in a later groups.update call.
+    remove: true
+  - target: $.paths['/groups.create','/groups.update'].post.requestBody.content['application/json'].schema.properties
+    update:
+      externalId: {type: string}
+      disableMentions: {type: boolean}
+  - target: $.paths['/groups.update'].post.requestBody.content['application/json'].schema.required
+    remove: true
+  - target: $.paths['/groups.update'].post.requestBody.content['application/json'].schema
+    description: Only id is required. Description is writable on update but cannot be null.
+    update:
+      required: [id]
+      properties:
+        description: {type: string, maxLength: 2000}
+  - target: $.paths['/groups.list'].post.requestBody.content['application/json'].schema.allOf[2].properties['externalId','query'].format
+    description: Search and external IDs are arbitrary strings, not UUIDs.
+    remove: true
+  - target: $.paths['/groups.list'].post.requestBody.content['application/json'].schema.allOf[2].properties
+    update:
+      name: {type: string, deprecated: true}
+      source: {type: string}
+  - target: $.paths['/groups.list','/groups.memberships','/groups.add_user','/groups.update_user'].post.responses['200'].content['application/json'].schema.properties.data.properties.groupMemberships.items
+    description: These endpoints use presentGroupUser, not presentGroupMembership.
+    update:
+      $ref: '#/components/schemas/GroupUser'
+  - target: $.paths['/groups.add_user'].post.requestBody.content['application/json'].schema.properties
+    update:
+      permission: {$ref: '#/components/schemas/GroupPermission'}
+  - target: $.paths['/groups.memberships'].post.requestBody.content['application/json'].schema.allOf[1].properties
+    update:
+      id: {format: uuid}
+      permission: {$ref: '#/components/schemas/GroupPermission'}
+  - target: $.paths['/groups.update_user'].post.requestBody.content['application/json'].schema.properties.permission
+    remove: true
+  - target: $.paths['/groups.update_user'].post.requestBody.content['application/json'].schema.properties
+    update:
+      permission: {$ref: '#/components/schemas/GroupPermission'}
+  - target: $.paths['/collections.add_group','/collections.group_memberships'].post.responses['200'].content['application/json'].schema.properties.data.properties.collectionGroupMemberships
+    remove: true
+  - target: $.paths['/collections.add_group','/collections.group_memberships'].post.responses['200'].content['application/json'].schema.properties.data.properties
+    description: v1.10.1 returns groupMemberships, not collectionGroupMemberships.
+    update:
+      groupMemberships: {type: array, items: {$ref: '#/components/schemas/GroupMembership'}}
+  - target: $.paths['/collections.list'].post.requestBody.content['application/json'].schema.allOf[1]
+    description: CollectionsListSchema has no Sorting fields; ordering is fixed by the handler.
+    remove: true
+  - target: $.paths['/collections.list'].post.requestBody.content['application/json'].schema.allOf[1].properties
+    update:
+      includeListOnly: {type: boolean, description: 'Admin-only visibility of collections without membership.'}
+  - target: $.paths['/collections.update'].post.requestBody.content['application/json'].schema.properties.deprecatedReason
+    description: This field is not accepted by v1.10.1.
+    remove: true
+  - target: $.paths['/collections.delete'].post.requestBody.content['application/json'].schema.properties.reason
+    description: Delete reasons were added after v1.10.1.
+    remove: true
+  - target: $.components.schemas.Collection.properties.deprecatedReason
+    description: presentCollection in v1.10.1 does not emit this field.
+    remove: true
+  - target: $.paths['/collections.create','/collections.update'].post.requestBody.content['application/json'].schema.properties.permission
+    remove: true
+  - target: $.paths['/collections.create','/collections.update'].post.requestBody.content['application/json'].schema.properties
+    description: Null removes default collection access. Add missing collection settings from the release schema.
+    update:
+      permission:
+        nullable: true
+        allOf: [{$ref: '#/components/schemas/Permission'}]
+      sort: {$ref: '#/components/schemas/CollectionSort'}
+      commenting: {type: boolean, nullable: true}
+      templateManagement: {$ref: '#/components/schemas/TemplateManagementPermission'}
+  - target: $.paths['/collections.create'].post.requestBody.content['application/json'].schema.properties
+    update:
+      index: {type: string}
+  - target: $.paths['/collections.create','/collections.update'].post.requestBody.content['application/json'].schema.properties['description','data','color']
+    update:
+      nullable: true
+  - target: $.paths['/collections.update'].post.requestBody.content['application/json'].schema.properties.icon
+    update:
+      nullable: true
+  - target: $.components.schemas.Collection.properties.sort
+    remove: true
+  - target: $.components.schemas.Collection.properties
+    update:
+      sort: {$ref: '#/components/schemas/CollectionSort'}
+  - target: $.components.schemas.Collection.properties.permission
+    remove: true
+  - target: $.components.schemas.Collection.properties
+    update:
+      permission:
+        nullable: true
+        allOf: [{$ref: '#/components/schemas/Permission'}]
+  - target: $.components.schemas.Collection.properties.templateManagement
+    remove: true
+  - target: $.components.schemas.Collection.properties
+    update:
+      templateManagement: {$ref: '#/components/schemas/TemplateManagementPermission'}

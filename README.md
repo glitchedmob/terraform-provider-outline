@@ -2,7 +2,7 @@
 
 [![Tests](https://github.com/glitchedmob/terraform-provider-outline/actions/workflows/test.yml/badge.svg)](https://github.com/glitchedmob/terraform-provider-outline/actions/workflows/test.yml)
 
-This repository contains the Outline provider configuration, HTTP transport, tests, and build tooling. It does not register resources or data sources yet. No API models or OpenAPI generation are included.
+This repository contains the Outline provider configuration, authenticated HTTP transport, generated Go IAM types and client, tests, and build tooling. It does not register resources or data sources yet.
 
 ## Requirements
 
@@ -30,9 +30,11 @@ make test
 make build
 ```
 
-`make lint` runs `go tool golangci-lint` v2.13.2, pinned in the root `go.mod`. No separate installer is needed. Tests cover configuration, schema validation, protocol 6, bearer headers, and redirect protection using local HTTP fixtures. They need no Outline credentials or running instance.
+`make lint` runs `go tool golangci-lint` v2.13.2, pinned in the root `go.mod`. No separate installer is needed. Tests cover configuration, schema validation, protocol 6, generated IAM contracts, timeouts, bearer headers, and redirect protection using local HTTP fixtures. They need no Outline credentials or running instance.
 
-Live acceptance tests and their workflow will follow when resources exist. There is no `make generate` target yet because API generation belongs to the next step.
+The official Outline OpenAPI source is pinned and committed under `openapi/`, separate from a release-verified correction overlay. `make generate` uses oapi-codegen v2.8.0 to generate Go models and client methods for 28 IAM operations. `make check-generated` rejects tracked and untracked client drift without fetching a live spec. See [API generation](openapi/README.md) for provenance, v1.10.1 compatibility, corrections, calling conventions, and limits. Commit generated `internal/client/client.gen.go` with its sources.
+
+Live acceptance tests and their workflow will follow when resources exist.
 
 ### Documentation
 
@@ -52,4 +54,4 @@ The provider has not been published to the Terraform Registry. The source addres
 
 ## License
 
-This project is licensed under the [Mozilla Public License 2.0](LICENSE).
+Provider code is licensed under the [Mozilla Public License 2.0](LICENSE). The upstream OpenAPI specification and code generated from it retain the [BSD-3-Clause license](openapi/LICENSE).

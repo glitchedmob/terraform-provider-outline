@@ -32,6 +32,11 @@ builds:
 archives:
   - formats: [zip]
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+      - src: openapi/LICENSE
+        dst: OUTLINE-OPENAPI-LICENSE
 
 checksum:
   extra_files:

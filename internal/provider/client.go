@@ -9,13 +9,15 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"github.com/glitchedmob/terraform-provider-outline/internal/client"
 )
 
 const maxTimeoutSeconds = int64((1<<63 - 1) / time.Second)
 
-// apiClient holds transport configuration for future resources. It has no API
-// endpoint methods or response models.
+// apiClient exposes generated endpoint methods through the authenticated transport.
 type apiClient struct {
+	*client.ClientWithResponses
 	baseURL    string
 	httpClient *http.Client
 }
@@ -48,20 +50,27 @@ func newAPIClient(baseURL, apiKey string, timeoutSeconds int64, version string) 
 		return nil, errors.New("timeout_seconds must be between 1 and 9223372036")
 	}
 
-	return &apiClient{
-		baseURL: strings.TrimRight(baseURL, "/"),
-		httpClient: &http.Client{
-			Timeout: time.Duration(timeoutSeconds) * time.Second,
-			Transport: &bearerTransport{
-				base:      http.DefaultTransport,
-				scheme:    parsedURL.Scheme,
-				host:      parsedURL.Host,
-				apiKey:    apiKey,
-				userAgent: "terraform-provider-outline/" + version,
-			},
-			// Do not forward bearer tokens through redirects, even on the same host.
-			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	httpClient := &http.Client{
+		Timeout: time.Duration(timeoutSeconds) * time.Second,
+		Transport: &bearerTransport{
+			base:      http.DefaultTransport,
+			scheme:    parsedURL.Scheme,
+			host:      parsedURL.Host,
+			apiKey:    apiKey,
+			userAgent: "terraform-provider-outline/" + version,
 		},
+		// Do not forward bearer tokens through redirects, even on the same host.
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
+	baseURL = strings.TrimRight(baseURL, "/")
+	generated, err := client.NewClientWithResponses(baseURL, client.WithHTTPClient(httpClient))
+	if err != nil {
+		return nil, errors.New("unable to create Outline API client")
+	}
+	return &apiClient{
+		ClientWithResponses: generated,
+		baseURL:             baseURL,
+		httpClient:          httpClient,
 	}, nil
 }
 

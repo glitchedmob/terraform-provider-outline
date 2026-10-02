@@ -3,6 +3,13 @@ default: fmt test build
 build:
 	go build -v ./...
 
+generate:
+	go tool oapi-codegen --config openapi/oapi-codegen.yaml openapi/outline.openapi.json
+
+check-generated: generate
+	git diff --exit-code -- internal/client/
+	test -z "$$(git ls-files --others --exclude-standard -- internal/client/)"
+
 generate-docs:
 	go tool tfplugindocs generate --provider-name outline --rendered-provider-name Outline
 
@@ -23,4 +30,4 @@ lint:
 test:
 	go test -v -cover ./...
 
-.PHONY: default build generate-docs validate-docs fmt fmt-check lint test
+.PHONY: default build generate check-generated generate-docs validate-docs fmt fmt-check lint test
