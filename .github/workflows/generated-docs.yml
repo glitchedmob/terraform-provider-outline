@@ -1,0 +1,31 @@
+name: Generated Docs
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  generated-docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.14.7"
+          terraform_wrapper: false
+      - run: make generate-docs
+      - name: Check generated documentation
+        run: |
+          git diff --exit-code -- docs/
+          test -z "$(git ls-files --others --exclude-standard -- docs/)"
+      - run: make validate-docs

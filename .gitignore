@@ -1,0 +1,26 @@
+# Binaries and release artifacts
+terraform-provider-outline
+terraform-provider-outline_*
+dist/
+
+# Terraform working directories and state
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+crash.log
+crash.*.log
+
+# Credentials
+.env
+.env.*
+!.env.example
+
+# Go
+coverage.out
+_artifacts/
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
