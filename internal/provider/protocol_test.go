@@ -23,13 +23,13 @@ func TestProtocol6Schema(t *testing.T) {
 	if len(response.Diagnostics) != 0 || response.Provider == nil || response.Provider.Block == nil {
 		t.Fatalf("unexpected protocol schema response: %v", response)
 	}
-	if len(response.ResourceSchemas) != 3 || len(response.DataSourceSchemas) != 2 || len(response.Functions) != 0 || len(response.EphemeralResourceSchemas) != 0 {
-		t.Fatal("expected group, user, and group member resources and group/user data sources")
+	if len(response.ResourceSchemas) != 4 || len(response.DataSourceSchemas) != 3 || len(response.Functions) != 0 || len(response.EphemeralResourceSchemas) != 0 {
+		t.Fatal("expected group, user, collection, and group member resources and group/user/collection data sources")
 	}
 	if response.ResourceSchemas["outline_group_member"] == nil || response.DataSourceSchemas["outline_group_member"] != nil {
 		t.Fatal("expected only a group member resource protocol schema")
 	}
-	for _, name := range []string{"outline_group", "outline_user"} {
+	for _, name := range []string{"outline_group", "outline_user", "outline_collection"} {
 		if response.ResourceSchemas[name] == nil || response.DataSourceSchemas[name] == nil {
 			t.Fatalf("missing %s protocol registration", name)
 		}

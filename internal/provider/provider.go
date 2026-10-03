@@ -98,11 +98,11 @@ func (p *OutlineProvider) Configure(ctx context.Context, req provider.ConfigureR
 }
 
 func (p *OutlineProvider) Resources(context.Context) []func() resource.Resource {
-	return []func() resource.Resource{NewGroupResource, NewUserResource, NewGroupMemberResource}
+	return []func() resource.Resource{NewGroupResource, NewUserResource, NewGroupMemberResource, NewCollectionResource}
 }
 
 func (p *OutlineProvider) DataSources(context.Context) []func() datasource.DataSource {
-	return []func() datasource.DataSource{NewGroupDataSource, NewUserDataSource}
+	return []func() datasource.DataSource{NewGroupDataSource, NewUserDataSource, NewCollectionDataSource}
 }
 
 // New returns a provider factory for protocol server registration and tests.

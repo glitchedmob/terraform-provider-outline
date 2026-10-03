@@ -31,7 +31,8 @@ test:
 	go test -v -cover ./...
 
 # Docker and Terraform are required. Override OUTLINE_VERSION to investigate another release.
+# The 23 serial container tests need room for cold starts as well as API pacing.
 testacc:
-	DOCKER_HOST="$${DOCKER_HOST:-$$(docker context inspect --format '{{.Endpoints.docker.Host}}')}" TF_ACC=1 go test -count=1 -v -timeout 15m -artifacts -outputdir="$(CURDIR)" ./internal/provider -run '^TestAcc'
+	DOCKER_HOST="$${DOCKER_HOST:-$$(docker context inspect --format '{{.Endpoints.docker.Host}}')}" TF_ACC=1 go test -count=1 -v -timeout 20m -artifacts -outputdir="$(CURDIR)" ./internal/provider -run '^TestAcc'
 
 .PHONY: default build generate check-generated generate-docs validate-docs fmt fmt-check lint test testacc

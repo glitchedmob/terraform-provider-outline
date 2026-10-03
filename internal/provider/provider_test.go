@@ -51,8 +51,8 @@ func TestProviderSchema(t *testing.T) {
 	if !ok || !timeout.Optional || timeout.Required || timeout.Sensitive || len(timeout.Validators) != 1 || timeout.MarkdownDescription == "" {
 		t.Fatalf("unexpected timeout_seconds schema: %v", timeout)
 	}
-	if len(p.Resources(t.Context())) != 3 || len(p.DataSources(t.Context())) != 2 {
-		t.Fatal("expected group, user, and group member resources and group/user data sources")
+	if len(p.Resources(t.Context())) != 4 || len(p.DataSources(t.Context())) != 3 {
+		t.Fatal("expected group, user, collection, and group member resources and group/user/collection data sources")
 	}
 	resources, dataSources := make(map[string]bool), make(map[string]bool)
 	for _, constructor := range p.Resources(t.Context()) {
@@ -68,7 +68,7 @@ func TestProviderSchema(t *testing.T) {
 	if !resources["outline_group_member"] || dataSources["outline_group_member"] {
 		t.Fatal("expected only a group member resource registration")
 	}
-	for _, name := range []string{"outline_group", "outline_user"} {
+	for _, name := range []string{"outline_group", "outline_user", "outline_collection"} {
 		if !resources[name] || !dataSources[name] {
 			t.Fatalf("missing %s registration: resources=%v data sources=%v", name, resources, dataSources)
 		}
