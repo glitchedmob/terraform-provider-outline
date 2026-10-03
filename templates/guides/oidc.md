@@ -12,7 +12,11 @@ This guide targets [Outline v1.10.1, server commit `4a5a616a21be800257dc11cef426
 
 ## Before provisioning
 
-Configure OIDC on your Outline deployment separately, following the [Outline hosting documentation](https://docs.getoutline.com/s/hosting). Configure the IdP to supply the email that the account will use in Outline. Provisioning an email does not prove that its owner can authenticate through your IdP.
+Configure OIDC on your Outline deployment separately, following the [Outline hosting documentation](https://docs.getoutline.com/s/hosting). Your trusted IdP must supply the matching account `email` and the boolean claim `email_verified: true` through UserInfo or the supported ID-token fallback. Matching email alone does not link a pending invitation. A missing or false verification claim causes Outline 1.10.1 to refuse that first sign-in.
+
+The pinned [OIDC router](https://github.com/outline/outline/blob/4a5a616a21be800257dc11cef4263d0dd0412156/plugins/oidc/server/auth/oidcRouter.ts) reads UserInfo first and falls back to the ID token when the claim is absent. A false UserInfo claim takes precedence over a true ID-token claim. The router also accepts the string `"true"`, but configure the [standard OIDC boolean](https://openid.net/specs/openid-connect-core-1_0.html#StandardClaims) `true`. The [user provisioner](https://github.com/outline/outline/blob/4a5a616a21be800257dc11cef4263d0dd0412156/server/commands/userProvisioner.ts) requires that verified result before matching an existing account by email.
+
+Only supply `email_verified: true` when the IdP has actually verified ownership of that email. Do not bypass Outline's check, inject a verification claim locally, or mark unverified addresses as verified. Provisioning an email does not prove that its owner can authenticate through your IdP.
 
 Use an unrestricted Outline API key owned by an active admin. Obtain that key outside Terraform and set `OUTLINE_API_KEY`; set `OUTLINE_BASE_URL` to your self-hosted API URL, including `/api`. Do not put the key in committed configuration. The user resource checks the caller and refuses any modifying action against the key owner's account, including deletion. Manage that account only with another admin's key.
 
@@ -109,6 +113,12 @@ Refresh does not treat authorization errors as proof of deletion. The release re
 
 ## What the tests verify
 
-Container acceptance tests use a disposable Outline 1.10.1 deployment and an admin API key. They test admin-side account provisioning without SMTP. They do not include a fake IdP or test an OIDC handshake, token exchange, first SSO login, or identity linking. Verify those flows with your actual Outline and IdP configuration before relying on them.
+Container acceptance tests use a disposable Outline 1.10.1 deployment. `TestAccOIDCFirstLogin` adds an isolated fake IdP and invites each target through Terraform's `outline_user` resource before calling the released `/auth/oidc` and `/auth/oidc.callback` routes. Verified UserInfo and ID-token fallback cases exchange a code, fetch UserInfo, and obtain an Outline session. The session's `auth.info` identifies the same invited UUID and can read a pre-granted private collection. Workspace role, stored group membership, and direct and group grants stay unchanged.
+
+Missing and false verification claims refuse linking with an `invalid-authentication` redirect notice, no session, no additional account, no authentication association, and no first-sign-in timestamp. A false UserInfo claim also refuses linking when the ID token says true. The fixture needs no SMTP, password, or real IdP credentials. ORM setup creates only the disposable workspace, operator, key, and workspace authentication configuration; it never links or signs in a target user.
+
+Run `make testacc-oidc` for these cases. Both HTTP services publish only loopback ports, and the IdP allows only the fixture's exact loopback callback. Cleanup removes partially started stacks and volumes. The auth stack does not save service logs, and HTTP failures withhold tokens, cookies, and query strings. Treat any Terraform debug output or manually collected container logs as sensitive.
+
+This fixture checks the pinned release's manually configured OIDC routes, not your real IdP's discovery, TLS, token policy, claim mapping, or deployment configuration. Verify first sign-in and identity linking with your actual Outline and IdP before relying on them. Other Outline versions still need their own source review and login checks.
 
 See the [user resource](https://registry.terraform.io/providers/glitchedmob/outline/latest/docs/resources/user) for the full schema and import behavior.

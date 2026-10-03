@@ -36,4 +36,8 @@ test:
 testacc:
 	DOCKER_HOST="$${DOCKER_HOST:-$$(docker context inspect --format '{{.Endpoints.docker.Host}}')}" TF_ACC=1 go test -count=1 -v -timeout 40m -artifacts -outputdir="$(CURDIR)" ./internal/provider -run '^TestAcc'
 
-.PHONY: default build generate check-generated generate-docs validate-docs fmt fmt-check lint test testacc
+# Real released OIDC auth routes, disposable provider, no real IdP credentials.
+testacc-oidc:
+	DOCKER_HOST="$${DOCKER_HOST:-$$(docker context inspect --format '{{.Endpoints.docker.Host}}')}" TF_ACC=1 go test -count=1 -v -timeout 10m -artifacts -outputdir="$(CURDIR)" ./internal/provider -run '^TestAccOIDCFirstLogin$$'
+
+.PHONY: default build generate check-generated generate-docs validate-docs fmt fmt-check lint test testacc testacc-oidc
