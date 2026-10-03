@@ -23,7 +23,7 @@ A successful filtered refresh deliberately stops auditing rows with unrelated na
 
 A valid filtered result without the exact UUID does not prove absence. A principal may have been renamed between the parent read and the query. The provider falls back to the complete unfiltered walker, including all validation, before removing the resource from state. Existing release-verified parent-absence checks remain unchanged.
 
-A filtered error, forbidden response, malformed page, duplicate, or changing total remains a diagnostic and retains state. It does not trigger an absence shortcut. Create, update, delete, import discovery, and post-removal verification always use the unfiltered walk. Keeping their full-list audit avoids narrowing the existing preflight and removal checks.
+A filtered error, forbidden response, malformed page, duplicate, or changing total remains a diagnostic and retains state. It does not trigger an absence shortcut. Create, update, delete, import discovery, and post-removal verification always use the unfiltered walk. Group-member import sets only the pair, so its following read with undiscovered permission uses the full unfiltered observer. Keeping their full-list audit avoids narrowing the existing preflight and removal checks.
 
 Neither walk is an atomic snapshot. The server counts and retrieves rows separately, then paginates by creation time with offsets and no unique tiebreaker. Stable totals and duplicate checks catch some movement, not all same-total churn. A concurrent rename during filtered pagination can change which rows qualify without changing the total. Coordinate concurrent writers; this optimization does not establish snapshot isolation or prevent the existing upsert race.
 
