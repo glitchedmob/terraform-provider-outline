@@ -54,7 +54,9 @@ Omit `name` if the IdP should control the display name. It is optional and compu
 
 Outline 1.10.1 coerces a guest invitation to member. The provider reads the stored account and performs a follow-up role update when needed.
 
-Changing the role of a suspended account temporarily activates it, changes the role, then restores the configured `suspended` value. This can briefly restore access. If a later write fails and the desired state is suspended, the provider makes a best-effort attempt to suspend it again. Check the account's actual state after an error; recovery can fail too.
+Outline 1.10.1 cannot change a suspended account's role while keeping it continuously suspended. With `suspended = true`, the provider refuses that change before any modifying request unless `allow_temporary_activation_for_role_change = true`. Keep the current role for offboarding, including after import. An unchanged role or name-only update does not activate the account. An explicit `suspended = false` intentionally reactivates it and does not require this option.
+
+Opting in activates the account, changes its role and configured name, then suspends it again. Existing sessions can regain access during that interval, including the old privileges before demotion. The endpoints use separate transactions. Best-effort suspension after a write failure cannot undo access, and process death or failed cleanup can leave the account active. Inspect the account after any error.
 
 Role defaults still apply to imported accounts. Configure `role` to match a non-member account before applying, or Terraform will plan to change it to member.
 
@@ -79,7 +81,7 @@ terraform import outline_user.alice 550e8400-e29b-41d4-a716-446655440000
 terraform plan
 ```
 
-Replace the UUID with the existing account's ID. Protect the state backup as sensitive data and keep it out of version control. Configure `email` and the required `suspended` value before import, and review role and name changes in the plan. Import initializes `suppress_email` to `true` and `delete_permanently` to `false`; it sends no invitation. Use another admin's key if the target owns your current API key.
+Replace the UUID with the existing account's ID. Protect the state backup as sensitive data and keep it out of version control. Configure `email` and the required `suspended` value before import, and review role and name changes in the plan. Import initializes `suppress_email` to `true`, `delete_permanently` to `false`, and `allow_temporary_activation_for_role_change` to `false`; it sends no invitation. Use another admin's key if the target owns your current API key.
 
 ## Failed-create recovery
 
@@ -97,7 +99,7 @@ Do not accept replacement blindly. Default destruction suspends and retains the 
 
 ## Retire or delete an account
 
-For reversible offboarding, keep the resource and set `suspended = true`. To hand management back to an administrator or another system without suspending or deleting it, back up state, remove only that resource's state entry, and remove its configuration before the next apply. Running destroy would invoke the account's destroy policy; removing only state while keeping the configuration would plan another Create.
+For reversible offboarding, keep the resource, set `suspended = true`, and keep the account's current role. Leave `allow_temporary_activation_for_role_change = false` to refuse temporary reactivation if its role later drifts. To hand management back to an administrator or another system without suspending or deleting it, back up state, remove only that resource's state entry, and remove its configuration before the next apply. Running destroy would invoke the account's destroy policy; removing only state while keeping the configuration would plan another Create.
 
 With the default `delete_permanently = false`, destroy suspends the user, retains the account, memberships, and content in Outline, and removes the resource from Terraform state. A later Create with the same email refuses to adopt that account. Import its UUID to manage or activate it again.
 

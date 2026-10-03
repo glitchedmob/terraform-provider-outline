@@ -347,6 +347,9 @@ func TestAccUserLifecycle(t *testing.T) {
 	}
 	config := func(role string, suspended bool, name string) string {
 		extra := fmt.Sprintf("  role = %q\n", role)
+		if role == "guest" && suspended {
+			extra += "  allow_temporary_activation_for_role_change = true\n"
+		}
 		if name != "" {
 			extra += fmt.Sprintf("  name = %q\n", name)
 		}
@@ -381,7 +384,7 @@ func TestAccUserLifecycle(t *testing.T) {
 				},
 				Config: config("guest", true, "Managed user"), Check: check("Managed user", "guest", true),
 			},
-			{ResourceName: address, ImportState: true, ImportStateVerify: true},
+			{ResourceName: address, ImportState: true, ImportStateVerify: true, ImportStateVerifyIgnore: []string{"allow_temporary_activation_for_role_change"}},
 			{Config: managed, Check: check("Managed user", "member", false)},
 			{
 				PreConfig: func() {
@@ -494,7 +497,8 @@ func TestAccUserDefaultDestroyAndImport(t *testing.T) {
 				ImportStateIdFunc: func(_ *terraform.State) (string, error) { return id, nil },
 				ImportStateCheck: func(states []*terraform.InstanceState) error {
 					if len(states) != 1 || states[0].ID != id || states[0].Attributes["suspended"] != "true" ||
-						states[0].Attributes["suppress_email"] != "true" || states[0].Attributes["delete_permanently"] != "false" {
+						states[0].Attributes["suppress_email"] != "true" || states[0].Attributes["delete_permanently"] != "false" ||
+						states[0].Attributes["allow_temporary_activation_for_role_change"] != "false" {
 						return fmt.Errorf("UUID import did not retain the account and safe defaults")
 					}
 					return nil

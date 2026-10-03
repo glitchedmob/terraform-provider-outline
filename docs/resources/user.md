@@ -39,6 +39,8 @@ resource "outline_user" "alice" {
 
 `suppress_email` is optional and computed, with a default of `true`. It only controls the invitation sent during creation. Changing it on an existing resource does not send or resend an email.
 
+`allow_temporary_activation_for_role_change` is optional and computed, with a default of `false`. Only an explicit `true` permits temporary activation for a role change ending with `suspended = true`. Unknown or null values are not consent. Changing this option alone does not modify the account.
+
 `delete_permanently` is optional and computed, with a default of `false`. It selects the destroy behavior described below.
 
 ## Creation and updates
@@ -47,7 +49,9 @@ Creation checks every page of the admin-visible user list, including pending and
 
 Outline 1.10.1 converts a guest invitation to a member invitation. The provider reads the stored account after inviting it and reconciles the requested role, name if configured, and explicit final suspension state.
 
-Changing a suspended account's role temporarily activates it, changes the role, then restores the configured `suspended` value. This can briefly restore access. If a follow-up write fails and the desired final state is suspended, the provider attempts to suspend the account again. That recovery is best-effort. Inspect the account if the apply reports an error.
+Outline 1.10.1 cannot change a suspended account's role while keeping it continuously suspended. With `suspended = true`, the provider refuses that change before any modifying request unless `allow_temporary_activation_for_role_change = true`. Keep the current role for offboarding, including after import. An unchanged role or name-only update does not activate the account. An explicit `suspended = false` intentionally reactivates it and does not require this option.
+
+Opting in activates the account, changes its role and configured name, then suspends it again. Existing sessions can regain access during that interval, including the old privileges before demotion. The endpoints use separate transactions. Best-effort suspension after a write failure cannot undo access, and process death or failed cleanup can leave the account active. Inspect the account after any error.
 
 Once Outline returns a newly created account's matching UUID, the provider retains it in state before follow-up validation, reads, or writes. Terraform still taints failed creates. Fix the API error, then run `terraform untaint outline_user.alice` using your resource address before applying again. The next apply reconciles the existing account. Do not retry replacement blindly. Default destruction retains the email, and Create then refuses it. If state was lost or the invitation response did not supply a usable UUID, check the workspace and import any created account before retrying.
 
@@ -69,10 +73,11 @@ Email replacement also uses the old resource's destroy policy. The default leave
 ### Required
 
 - `email` (String) Account email. Invitations use lowercase email. Equivalent configured casing is preserved in state. Email changes require replacement, not administrative renaming. With default destruction, the old account remains suspended; returning to its email requires import.
-- `suspended` (Boolean) Explicit desired final suspension state. Set false to activate, true to suspend. Changing a suspended account's role temporarily activates it, changes the role, then restores this desired state. Activation is not a sign-in or proof of an active IdP account.
+- `suspended` (Boolean) Explicit desired final suspension state. Set false to activate, true to suspend. Changing a currently suspended account's role while keeping true requires allow_temporary_activation_for_role_change. Activation is not a sign-in or proof of an active IdP account.
 
 ### Optional
 
+- `allow_temporary_activation_for_role_change` (Boolean) Explicitly allow temporary activation to change a currently suspended account's role when suspended is true. Defaults to false, which refuses before any write. Opting in can restore access through existing sessions; best-effort resuspension cannot undo access or guarantee recovery after failure. Not required for intended reactivation with suspended false or an unchanged role. Changing this option alone does not modify the account.
 - `delete_permanently` (Boolean) Opt in to users.delete on destruction. Defaults to false, which only suspends and retains the account and memberships. Deletion is irreversible through this provider; Outline may retain anonymized soft-deleted database rows. Does not delete documents or guarantee erasure of retained content. Never deletes the API-key owner.
 - `name` (String) Optional managed display name, 1 to 255 Unicode code points, without URLs. On creation, omission uses Pending user. After creation, omission stops name management. IdP sign-in can change the name; a configured name is restored on apply.
 - `role` (String) Workspace role: admin, member, viewer, or guest. Defaults to member. Server edition, licensing, key scopes, and policies can reject role changes. Guest invitations are reconciled with a follow-up role update.
@@ -94,4 +99,4 @@ terraform import outline_user.alice 550e8400-e29b-41d4-a716-446655440000
 
 Configure `email` to match the imported account and set the required `suspended` value to your intended final state. Configure the current role if it is not `member`; otherwise the default plans to change it. Omit `name` to leave it unmanaged, or configure the name you want Terraform to enforce.
 
-Import initializes `suppress_email` to `true` and `delete_permanently` to `false`. Import does not send an invitation or configure SSO. Review the plan before applying, especially role, suspension, and deletion policy changes.
+Import initializes `suppress_email` to `true`, `delete_permanently` to `false`, and `allow_temporary_activation_for_role_change` to `false`. Import does not send an invitation or configure SSO. Review the plan before applying, especially role, suspension, and deletion policy changes.
