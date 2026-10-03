@@ -21,7 +21,9 @@ func TestResolveProviderConfig(t *testing.T) {
 		wantKey     string
 		wantTimeout int64
 	}{
-		"defaults": {wantURL: defaultBaseURL, wantTimeout: defaultTimeoutSeconds},
+		"disabled retries":    {config: OutlineProviderModel{RateLimitWaitSeconds: types.Int64Value(0)}, wantURL: defaultBaseURL, wantTimeout: defaultTimeoutSeconds},
+		"custom retry budget": {config: OutlineProviderModel{RateLimitWaitSeconds: types.Int64Value(3600)}, wantURL: defaultBaseURL, wantTimeout: defaultTimeoutSeconds},
+		"defaults":            {wantURL: defaultBaseURL, wantTimeout: defaultTimeoutSeconds},
 		"environment": {
 			environment: environment, wantURL: "https://environment.example/api", wantKey: "environment-key", wantTimeout: defaultTimeoutSeconds,
 		},
@@ -46,7 +48,14 @@ func TestResolveProviderConfig(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			baseURL, apiKey, timeout := resolveProviderConfig(test.config, func(key string) string { return test.environment[key] })
+			baseURL, apiKey, timeout, wait := resolveProviderConfig(test.config, func(key string) string { return test.environment[key] })
+			wantWait := defaultRateLimitWaitSeconds
+			if !test.config.RateLimitWaitSeconds.IsNull() {
+				wantWait = test.config.RateLimitWaitSeconds.ValueInt64()
+			}
+			if wait != wantWait {
+				t.Fatalf("unexpected rate limit wait budget: %d, want %d", wait, wantWait)
+			}
 			if baseURL != test.wantURL || apiKey != test.wantKey || timeout != test.wantTimeout {
 				t.Fatalf("unexpected resolved URL, key, or timeout: %q, %q, %d", baseURL, apiKey, timeout)
 			}

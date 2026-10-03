@@ -29,9 +29,10 @@ type OutlineProvider struct {
 
 // OutlineProviderModel describes the provider configuration.
 type OutlineProviderModel struct {
-	BaseURL        types.String `tfsdk:"base_url"`
-	APIKey         types.String `tfsdk:"api_key"`
-	TimeoutSeconds types.Int64  `tfsdk:"timeout_seconds"`
+	BaseURL              types.String `tfsdk:"base_url"`
+	APIKey               types.String `tfsdk:"api_key"`
+	TimeoutSeconds       types.Int64  `tfsdk:"timeout_seconds"`
+	RateLimitWaitSeconds types.Int64  `tfsdk:"rate_limit_wait_seconds"`
 }
 
 func (p *OutlineProvider) Metadata(_ context.Context, _ provider.MetadataRequest, resp *provider.MetadataResponse) {
@@ -52,8 +53,13 @@ func (p *OutlineProvider) Schema(_ context.Context, _ provider.SchemaRequest, re
 				Optional:            true,
 				Sensitive:           true,
 			},
+			"rate_limit_wait_seconds": schema.Int64Attribute{
+				MarkdownDescription: "Total rate-limit wait budget per API call in seconds, with at most three retries per call. Defaults to `120`; `0` disables retries. Must be an integer from `0` through `3600`. Only audited Outline 1.10.1 pre-mutation 429 errors with valid Retry-After can retry groups.create, users.invite, collections.add_user, and users.delete. Network attempts have a separate timeout_seconds limit; context cancellation stops waits. Hourly quotas normally fail rather than wait an hour with the default budget.",
+				Optional:            true,
+				Validators:          []validator.Int64{int64validator.Between(0, maxRateLimitWaitSeconds)},
+			},
 			"timeout_seconds": schema.Int64Attribute{
-				MarkdownDescription: "HTTP request timeout in seconds. Defaults to `30`. Must be a positive integer no greater than `9223372036`.",
+				MarkdownDescription: "Timeout for each HTTP attempt in seconds, including request pacing and response reads, but excluding rate-limit waits. Defaults to `30`. Must be a positive integer no greater than `9223372036`. Context cancellation can stop both attempts and waits sooner.",
 				Optional:            true,
 				Validators: []validator.Int64{
 					int64validator.Between(1, maxTimeoutSeconds),
@@ -82,13 +88,17 @@ func (p *OutlineProvider) Configure(ctx context.Context, req provider.ConfigureR
 		resp.Diagnostics.AddAttributeError(path.Root("timeout_seconds"), "Unknown Outline Timeout",
 			"The timeout_seconds must be known while the provider is being configured.")
 	}
+	if config.RateLimitWaitSeconds.IsUnknown() {
+		resp.Diagnostics.AddAttributeError(path.Root("rate_limit_wait_seconds"), "Unknown Outline Rate Limit Wait",
+			"The rate_limit_wait_seconds must be known while the provider is being configured.")
+	}
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	baseURL, apiKey, timeoutSeconds := resolveProviderConfig(config, os.Getenv)
+	baseURL, apiKey, timeoutSeconds, waitSeconds := resolveProviderConfig(config, os.Getenv)
 	// Construction validates local configuration only. No API requests happen here.
-	client, err := newAPIClient(baseURL, apiKey, timeoutSeconds, p.version)
+	client, err := newAPIClientWithRateLimitWait(baseURL, apiKey, timeoutSeconds, waitSeconds, p.version)
 	if err != nil {
 		resp.Diagnostics.AddError("Unable to Configure Outline API Client", err.Error())
 		return
@@ -112,7 +122,7 @@ func New(version string) func() provider.Provider {
 	}
 }
 
-func resolveProviderConfig(config OutlineProviderModel, getenv func(string) string) (string, string, int64) {
+func resolveProviderConfig(config OutlineProviderModel, getenv func(string) string) (string, string, int64, int64) {
 	baseURL := strings.TrimSpace(getenv("OUTLINE_BASE_URL"))
 	if baseURL == "" {
 		baseURL = defaultBaseURL
@@ -130,5 +140,9 @@ func resolveProviderConfig(config OutlineProviderModel, getenv func(string) stri
 	if !config.TimeoutSeconds.IsNull() {
 		timeoutSeconds = config.TimeoutSeconds.ValueInt64()
 	}
-	return baseURL, strings.TrimSpace(apiKey), timeoutSeconds
+	waitSeconds := defaultRateLimitWaitSeconds
+	if !config.RateLimitWaitSeconds.IsNull() {
+		waitSeconds = config.RateLimitWaitSeconds.ValueInt64()
+	}
+	return baseURL, strings.TrimSpace(apiKey), timeoutSeconds, waitSeconds
 }

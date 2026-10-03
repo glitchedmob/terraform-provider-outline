@@ -22,9 +22,14 @@ type apiClient struct {
 	baseURL    string
 	apiKey     string
 	httpClient *http.Client
+	rateLimits *rateLimitDoer
 }
 
 func newAPIClient(baseURL, apiKey string, timeoutSeconds int64, version string) (*apiClient, error) {
+	return newAPIClientWithRateLimitWait(baseURL, apiKey, timeoutSeconds, defaultRateLimitWaitSeconds, version)
+}
+
+func newAPIClientWithRateLimitWait(baseURL, apiKey string, timeoutSeconds, waitSeconds int64, version string) (*apiClient, error) {
 	parsedURL, err := url.Parse(baseURL)
 	if err != nil {
 		// Do not echo URLs that might contain credentials.
@@ -52,6 +57,10 @@ func newAPIClient(baseURL, apiKey string, timeoutSeconds int64, version string) 
 		return nil, errors.New("timeout_seconds must be between 1 and 9223372036")
 	}
 
+	if waitSeconds < 0 || waitSeconds > maxRateLimitWaitSeconds {
+		return nil, errors.New("rate_limit_wait_seconds must be between 0 and 3600")
+	}
+
 	httpClient := &http.Client{
 		Timeout: time.Duration(timeoutSeconds) * time.Second,
 		Transport: &bearerTransport{
@@ -66,7 +75,14 @@ func newAPIClient(baseURL, apiKey string, timeoutSeconds int64, version string) 
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
 	baseURL = strings.TrimRight(baseURL, "/")
-	generated, err := client.NewClientWithResponses(baseURL, client.WithHTTPClient(httpClient))
+	rateLimits := &rateLimitDoer{
+		client:  httpClient,
+		baseURL: baseURL,
+		budget:  time.Duration(waitSeconds) * time.Second,
+		now:     time.Now,
+		wait:    waitForRateLimit,
+	}
+	generated, err := client.NewClientWithResponses(baseURL, client.WithHTTPClient(rateLimits))
 	if err != nil {
 		return nil, errors.New("unable to create Outline API client")
 	}
@@ -75,6 +91,7 @@ func newAPIClient(baseURL, apiKey string, timeoutSeconds int64, version string) 
 		baseURL:             baseURL,
 		apiKey:              apiKey,
 		httpClient:          httpClient,
+		rateLimits:          rateLimits,
 	}, nil
 }
 
@@ -91,7 +108,7 @@ func (t *bearerTransport) RoundTrip(request *http.Request) (*http.Response, erro
 	if request.URL.Scheme != t.scheme || request.URL.Host != t.host {
 		return nil, errors.New("refusing to send Outline API credentials to a different origin")
 	}
-	// Pace all requests without replaying writes. Wait honors context cancellation.
+	// Pace each attempt. Quota waits happen outside http.Client's network timeout.
 	if t.limiter != nil {
 		if err := t.limiter.Wait(request.Context()); err != nil {
 			return nil, err
