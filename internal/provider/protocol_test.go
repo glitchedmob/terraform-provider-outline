@@ -23,7 +23,7 @@ func TestProtocol6Schema(t *testing.T) {
 	if len(response.Diagnostics) != 0 || response.Provider == nil || response.Provider.Block == nil {
 		t.Fatalf("unexpected protocol schema response: %v", response)
 	}
-	if len(response.ResourceSchemas) != 4 || len(response.DataSourceSchemas) != 3 || len(response.Functions) != 0 || len(response.EphemeralResourceSchemas) != 0 {
+	if len(response.ResourceSchemas) != 5 || len(response.DataSourceSchemas) != 3 || len(response.Functions) != 0 || len(response.EphemeralResourceSchemas) != 0 {
 		t.Fatal("expected group, user, collection, and group member resources and group/user/collection data sources")
 	}
 	if response.ResourceSchemas["outline_group_member"] == nil || response.DataSourceSchemas["outline_group_member"] != nil {

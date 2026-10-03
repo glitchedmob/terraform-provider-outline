@@ -51,7 +51,7 @@ func TestProviderSchema(t *testing.T) {
 	if !ok || !timeout.Optional || timeout.Required || timeout.Sensitive || len(timeout.Validators) != 1 || timeout.MarkdownDescription == "" {
 		t.Fatalf("unexpected timeout_seconds schema: %v", timeout)
 	}
-	if len(p.Resources(t.Context())) != 4 || len(p.DataSources(t.Context())) != 3 {
+	if len(p.Resources(t.Context())) != 5 || len(p.DataSources(t.Context())) != 3 {
 		t.Fatal("expected group, user, collection, and group member resources and group/user/collection data sources")
 	}
 	resources, dataSources := make(map[string]bool), make(map[string]bool)

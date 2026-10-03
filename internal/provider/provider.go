@@ -98,7 +98,7 @@ func (p *OutlineProvider) Configure(ctx context.Context, req provider.ConfigureR
 }
 
 func (p *OutlineProvider) Resources(context.Context) []func() resource.Resource {
-	return []func() resource.Resource{NewGroupResource, NewUserResource, NewGroupMemberResource, NewCollectionResource}
+	return []func() resource.Resource{NewGroupResource, NewUserResource, NewGroupMemberResource, NewCollectionResource, NewCollectionGroupResource}
 }
 
 func (p *OutlineProvider) DataSources(context.Context) []func() datasource.DataSource {

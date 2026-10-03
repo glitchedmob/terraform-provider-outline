@@ -9,7 +9,7 @@ description: |-
 
 Manages an active Outline collection's name, Markdown landing-page description, default workspace access, and public-sharing setting. Outline assigns the computed `id` during creation. Renames update the collection in place.
 
-This resource does not manage documents, direct user grants, or group grants. Default access is separate from those grants. Making a collection private does not remove its existing memberships.
+This resource does not manage documents, direct user grants, or group grants. Default access is separate from those grants. Making a collection private does not remove its existing memberships. Use the [collection group resource](https://registry.terraform.io/providers/glitchedmob/outline/latest/docs/resources/collection_group) to manage an explicit group grant separately.
 
 Use an unrestricted API key owned by an active workspace admin. The provider verifies the caller for every operation, including refresh and import. The resource targets Outline 1.10.1 only.
 
@@ -43,7 +43,7 @@ Outline creates a direct collection-admin membership for the API-key owner when 
 
 Changing default access from `read_write` to `read` or private can also create a direct caller-admin membership, but only when the caller has no direct membership. The server does not upgrade an existing direct membership in this case. Outline 1.10.1 can create that grant even when an update omits permission. The provider avoids this omission bug by always sending the desired value, including null for private.
 
-These grants are not Terraform-managed memberships. The resource does not remove or reconcile them, and a private default does not revoke direct or group access. Review memberships separately.
+These caller-admin grants are not Terraform-managed memberships. The collection resource does not remove or reconcile them, and a private default does not revoke direct or group access. Review memberships separately.
 
 Workspace admins can read private collection metadata without membership. That metadata access does not grant access to private documents.
 

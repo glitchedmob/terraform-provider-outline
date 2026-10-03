@@ -7,7 +7,7 @@ description: |-
 
 # Outline provider
 
-The Outline provider manages workspace users, manually maintained groups, group memberships, and active collections through the Outline HTTP API. It looks up users by UUID or exact normalized email, and groups and collections by UUID or exact name. The API contracts target Outline 1.10.1 only; compatibility with other releases is not claimed.
+The Outline provider manages workspace users, manually maintained groups, group memberships, active collections, and explicit collection group grants through the Outline HTTP API. It looks up users by UUID or exact normalized email, and groups and collections by UUID or exact name. The API contracts target Outline 1.10.1 only; compatibility with other releases is not claimed.
 
 ## Resources and data sources
 
@@ -19,11 +19,12 @@ The Outline provider manages workspace users, manually maintained groups, group 
 - [Group member resource](https://registry.terraform.io/providers/glitchedmob/outline/latest/docs/resources/group_member), manages one user's membership and permission in a manual group; import uses `group_id/user_id`
 - [Collection resource](https://registry.terraform.io/providers/glitchedmob/outline/latest/docs/resources/collection), manages active collections by stable UUID; defaults to private with public sharing disabled and destruction blocked
 - [Collection data source](https://registry.terraform.io/providers/glitchedmob/outline/latest/docs/data-sources/collection), reads active or archived metadata by UUID or exact name, including private collections
+- [Collection group resource](https://registry.terraform.io/providers/glitchedmob/outline/latest/docs/resources/collection_group), manages one explicit collection/group grant with required permission and `collection_id/group_id` import; synchronized groups are supported
 - [Import guide](https://registry.terraform.io/providers/glitchedmob/outline/latest/docs/guides/import), explains adoption and configuration defaults for existing objects
 
-Collections have separate default access and direct user/group grants. The provider manages only the default, not grants or documents. Outline creates a direct caller-admin grant on collection creation. Admin metadata visibility does not grant private-document access. Collection deletion trashes published content; apply `allow_destroy = true` before destruction. To stop managing without deletion, remove the state entry and configuration instead.
+Collections have separate default access and direct user/group grants. The collection resource manages default access; `outline_collection_group` manages only its explicit collection/group pair with required `read`, `read_write`, or `admin` permission and no default. It does not edit group names or members or collection defaults. The provider does not manage direct user grants, document grants, or documents. Outline creates a direct caller-admin grant on collection creation. Admin metadata visibility does not grant private-document access. Collection deletion trashes published content; apply `allow_destroy = true` before destruction. To stop managing without deletion, remove the state entry and configuration instead.
 
-Use an unrestricted admin-owned API key. User, group membership, and collection operations verify an active workspace admin. User modifying actions refuse to target the key owner's account; group membership operations support self-membership.
+Use an unrestricted admin-owned API key. User, group membership, collection, and collection group grant operations verify an active workspace admin. User modifying actions refuse to target the key owner's account; group membership operations support self-membership.
 
 ## Example usage
 
