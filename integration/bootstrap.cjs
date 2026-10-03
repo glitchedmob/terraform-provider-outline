@@ -11,7 +11,7 @@ if (version !== "1.10.1") {
 }
 
 const { sequelize } = require("./build/server/storage/database");
-const { Team, User, ApiKey } = require("./build/server/models");
+const { Team, User, ApiKey, AuthenticationProvider } = require("./build/server/models");
 
 async function bootstrap() {
   await sequelize.authenticate();
@@ -24,6 +24,17 @@ async function bootstrap() {
       { name: "Terraform acceptance" },
       { transaction }
     );
+    // Workspace authentication setup only. Target users are invited by Terraform
+    // and linked only by the released /auth/oidc.callback route.
+    if (process.env.OIDC_CLIENT_ID === "outline-acceptance") {
+      if (version !== "1.10.1") {
+        throw new Error("OIDC fixture requires Outline 1.10.1");
+      }
+      await AuthenticationProvider.create(
+        { name: "oidc", providerId: "127.0.0.1", teamId: team.id, enabled: true },
+        { transaction }
+      );
+    }
     const user = await User.create(
       {
         name: "Terraform acceptance admin",
