@@ -84,6 +84,10 @@ func (m *userLookupModel) setUser(user *client.User) {
 }
 
 func (a *apiClient) requireUserAdmin(ctx context.Context) (*client.User, error) {
+	return a.requireIAMAdmin(ctx, "outline_user")
+}
+
+func (a *apiClient) requireIAMAdmin(ctx context.Context, resourceName string) (*client.User, error) {
 	response, err := a.AuthInfoWithResponse(ctx)
 	if response == nil {
 		return nil, a.checkResponse("auth.info", nil, nil, err)
@@ -103,7 +107,7 @@ func (a *apiClient) requireUserAdmin(ctx context.Context) (*client.User, error) 
 		return nil, fmt.Errorf("auth.info: %w", err)
 	}
 	if *user.Role != client.UserRoleAdmin || *user.IsSuspended {
-		return nil, errors.New("outline_user requires an active admin-owned API key")
+		return nil, fmt.Errorf("%s requires an active admin-owned API key", resourceName)
 	}
 	return user, nil
 }

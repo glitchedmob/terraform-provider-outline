@@ -15,7 +15,8 @@ import (
 
 var errNotFound = errors.New("outline object not found")
 
-// HTTP errors are not Go errors in the generated client. Only 404 means absent.
+// HTTP errors are not Go errors in the generated client. A 404 yields an
+// absence candidate; callers must verify their endpoint's missing-object contract.
 func (a *apiClient) checkResponse(operation string, response *http.Response, body []byte, requestErr error) error {
 	if requestErr != nil {
 		if errors.Is(requestErr, context.Canceled) {

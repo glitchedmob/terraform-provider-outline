@@ -58,7 +58,7 @@ func validateGroup(group *client.Group, expectedID uuid.UUID) error {
 func managedGroup(group *client.Group) error {
 	if (group.ExternalId.IsSpecified() && !group.ExternalId.IsNull() && group.ExternalId.GetOrEmpty() != "") ||
 		(group.ExternalGroup.IsSpecified() && !group.ExternalGroup.IsNull()) {
-		return errors.New("externally linked or synchronized groups cannot be managed by outline_group; externalId cannot be cleared safely. Use the lookup data source instead")
+		return errors.New("externally linked or synchronized groups cannot be managed by this provider; externalId cannot be cleared safely. Use the lookup data source instead")
 	}
 	return nil
 }
@@ -78,9 +78,13 @@ func (a *apiClient) readGroup(ctx context.Context, id uuid.UUID) (*client.Group,
 	requestErr := err
 	if err = a.checkResponse("groups.info", response.HTTPResponse, response.Body, err); err != nil {
 		// v1.10.1 authorizes a nil Group and returns authorization_error for a
-		// deleted ID. A 403 alone never proves absence. Confirm admin identity and
-		// the complete workspace list before removing state.
-		if requestErr == nil && response.StatusCode() == http.StatusForbidden && response.JSON403 != nil && response.JSON403.Error != nil && *response.JSON403.Error == "authorization_error" {
+		// deleted ID. Neither a 403 nor an unexpected route/proxy 404 proves
+		// absence. Confirm admin identity and the complete workspace list.
+		if errors.Is(err, errNotFound) {
+			err = errors.New(err.Error())
+		}
+		forbidden := response.StatusCode() == http.StatusForbidden && response.JSON403 != nil && response.JSON403.Error != nil && *response.JSON403.Error == "authorization_error"
+		if requestErr == nil && (response.StatusCode() == http.StatusNotFound || forbidden) {
 			absent, verifyErr := a.confirmGroupAbsent(ctx, id)
 			if verifyErr != nil {
 				return nil, fmt.Errorf("%w; cannot establish group absence: %v", err, verifyErr)

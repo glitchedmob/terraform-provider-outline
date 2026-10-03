@@ -477,11 +477,15 @@ func TestGroupHTTPStatusHandling(t *testing.T) {
 				case "find":
 					group, err = api.findGroup(t.Context(), "Engineering")
 				}
-				if err == nil || group != nil || calls.Load() != 1 {
-					t.Fatalf("status accepted or replayed: group=%v err=%v calls=%d", group, err, calls.Load())
+				wantCalls := int32(1)
+				if operation == "read" && status == http.StatusNotFound {
+					wantCalls = 2 // The failed auth.info check cannot establish absence.
 				}
-				if errors.Is(err, errNotFound) != (status == http.StatusNotFound) {
-					t.Fatalf("only 404 can mean absent: %v", err)
+				if err == nil || group != nil || calls.Load() != wantCalls {
+					t.Fatalf("status accepted or write replayed: group=%v err=%v calls=%d", group, err, calls.Load())
+				}
+				if errors.Is(err, errNotFound) != (status == http.StatusNotFound && operation != "read") {
+					t.Fatalf("unexpected absence candidate: %v", err)
 				}
 				if strings.Contains(err.Error(), groupTestKey) {
 					t.Fatal("API error leaked bearer token")
@@ -508,7 +512,7 @@ func TestGroupResourceAbsenceAndForbidden(t *testing.T) {
 			var calls atomic.Int32
 			r := &groupResource{api: groupTestClient(t, func(w http.ResponseWriter, req *http.Request) {
 				calls.Add(1)
-				if req.URL.Path != "/api/groups.info" {
+				if req.URL.Path != "/api/groups.info" && (status != 404 || req.URL.Path != "/api/auth.info") {
 					t.Errorf("failed preflight must not delete: %s", req.URL.Path)
 				}
 				w.WriteHeader(status)
@@ -517,15 +521,16 @@ func TestGroupResourceAbsenceAndForbidden(t *testing.T) {
 			state := tfsdk.State(groupTestPlan(t, r, groupTestModel()))
 			read := resource.ReadResponse{State: state}
 			r.Read(t.Context(), resource.ReadRequest{State: state}, &read)
-			if read.Diagnostics.HasError() != (status != 404) || read.State.Raw.IsNull() != (status == 404) {
-				t.Fatalf("read status %d: %v null=%v", status, read.Diagnostics, read.State.Raw.IsNull())
-			}
-			if status != 404 && !read.State.Raw.Equal(state.Raw) {
-				t.Fatal("read removed inaccessible state")
+			if !read.Diagnostics.HasError() || !read.State.Raw.Equal(state.Raw) {
+				t.Fatalf("read removed inaccessible/unverified state: %v", read.Diagnostics)
 			}
 			deleted := resource.DeleteResponse{State: state}
 			r.Delete(t.Context(), resource.DeleteRequest{State: state}, &deleted)
-			if deleted.Diagnostics.HasError() != (status != 404) || !deleted.State.Raw.Equal(state.Raw) || calls.Load() != 2 {
+			wantCalls := int32(2)
+			if status == 404 {
+				wantCalls = 4 // Each read also verifies admin identity, unsuccessfully.
+			}
+			if !deleted.Diagnostics.HasError() || !deleted.State.Raw.Equal(state.Raw) || calls.Load() != wantCalls {
 				t.Fatalf("delete preflight: %v calls=%d", deleted.Diagnostics, calls.Load())
 			}
 			d := &groupDataSource{api: r.api}
