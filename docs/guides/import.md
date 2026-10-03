@@ -1,14 +1,16 @@
 ---
 page_title: "Import existing objects - Outline"
 description: |-
-  Adopt existing Outline collections, users, groups, group memberships, and collection group grants without recreating them.
+  Adopt existing Outline collections, users, groups, group memberships, and explicit collection group or user grants without recreating them.
 ---
 
 # Import existing objects
 
 Import adds an existing object to Terraform state. It does not create the object or make omitted configuration values unmanaged. Match the configuration to the existing object and review the next plan before applying. Example UUIDs are placeholders.
 
-Use an unrestricted Outline API key owned by an active workspace admin. Set `OUTLINE_API_KEY` and, for a self-hosted instance, `OUTLINE_BASE_URL` including `/api`. Keep credentials and state backups out of version control. These contracts target Outline 1.10.1 only.
+Use an unrestricted Outline API key owned by an active workspace admin. Set `OUTLINE_API_KEY` and, for a self-hosted instance, `OUTLINE_BASE_URL` including `/api`. Keep credentials and state backups out of version control. These contracts target Outline 1.10.1 only. With provider aliases, import uses the provider configured on the target resource block. Keep its IDs in that instance; see the [multiple-instance guide](https://registry.terraform.io/providers/glitchedmob/outline/latest/docs/guides/multiple-instances).
+
+All six resources support import. The three data sources read existing users, groups, and collections without adopting them. Documents, document grants, and API keys are not managed.
 
 ## Import a collection
 
@@ -48,7 +50,7 @@ Review `terraform plan` before applying the import block. A declarative import c
 
 Collection defaults are enforced after import. Omitted or null `permission` means private and removes default workspace access, omitted `description` clears it, and omitted `sharing` disables public document sharing. Match these attributes explicitly to avoid an unwanted private reset or other changes. Import resets the local `allow_destroy` guard to false.
 
-Import itself does not change grants. The collection resource does not manage direct user or group grants, and making a collection private leaves those grants in place. Manage explicit group grants separately with the [collection group resource](https://registry.terraform.io/providers/glitchedmob/outline/latest/docs/resources/collection_group). A later update from `read_write` to another default can create a caller-admin grant if the caller has no direct membership. Admin metadata access is not private-document access.
+Import itself does not change grants. The collection resource does not manage direct user or group grants, and making a collection private leaves those grants in place. Manage explicit grants separately with the [collection group resource](https://registry.terraform.io/providers/glitchedmob/outline/latest/docs/resources/collection_group) and [collection user resource](https://registry.terraform.io/providers/glitchedmob/outline/latest/docs/resources/collection_user). A later update from `read_write` to another default can create a caller-admin grant if the caller has no direct membership. Admin metadata access is not private-document access.
 
 ## Other import formats
 
@@ -58,15 +60,25 @@ Each resource page documents its full import behavior.
 - [Groups](https://registry.terraform.io/providers/glitchedmob/outline/latest/docs/resources/group) use the group UUID, not name or external identifier. Match `name`, `description`, and `disable_mentions`. Externally linked or synchronized groups cannot be imported.
 - [Group memberships](https://registry.terraform.io/providers/glitchedmob/outline/latest/docs/resources/group_member) use `group_id/user_id` in that order, with exactly one slash and two UUIDs. Match both parent IDs. Set `permission = "admin"` for an admin membership, or the default reconciles it to `member`. This is not Outline's `userId-groupId` presenter ID.
 - [Collection group grants](https://registry.terraform.io/providers/glitchedmob/outline/latest/docs/resources/collection_group) use `collection_id/group_id` in that order, with exactly one slash and two canonical lowercase, nonzero UUIDs. Match both parent IDs. Import discovers the stored permission; configure the required `permission` as `read`, `read_write`, or `admin` to match it. There is no default. Externally linked and synchronized groups are supported. Archived collections are refused, but a collection's `admin` default is allowed because this resource does not edit it. Do not use the server's grant-row UUID.
+- [Direct collection user grants](https://registry.terraform.io/providers/glitchedmob/outline/latest/docs/resources/collection_user) use `collection_id/user_id` in that order, with exactly one slash and two canonical lowercase, nonzero UUIDs. Match both parent IDs and the required stored `read`, `read_write`, or `admin` permission. There is no default. Import reads the explicit direct grant, not the user's effective access or group/default permissions. Archived collections are refused; an `admin` collection default is allowed. The target must not own the current API key, including during import and refresh. Do not use the server's grant-row UUID.
 
 ```shell
 terraform import outline_user.alice 8b58a9b0-043e-4b76-a0b7-a164674537cf
 terraform import outline_group.engineering 550e8400-e29b-41d4-a716-446655440000
 terraform import outline_group_member.alice 550e8400-e29b-41d4-a716-446655440000/8b58a9b0-043e-4b76-a0b7-a164674537cf
 terraform import outline_collection_group.engineering 550e8400-e29b-41d4-a716-446655440000/8b58a9b0-043e-4b76-a0b7-a164674537cf
+terraform import outline_collection_user.alice 550e8400-e29b-41d4-a716-446655440000/8b58a9b0-043e-4b76-a0b7-a164674537cf
 ```
 
 Import each object, membership, or grant into only one resource address and one Terraform state. Literal parent UUIDs do not establish dependencies. When Terraform manages the parents, reference their `id` attributes in membership or grant configuration so Terraform orders creation and destruction correctly.
+
+## Import a creator's direct grant intentionally
+
+Outline unavoidably creates a direct collection-admin grant for the collection creator. A new `outline_collection_user` never silently adopts that grant. It also refuses to manage the API-key owner's own direct grant during create, read, import, update, and delete, to prevent dropping or demoting the caller's stored collection control.
+
+If you intend to manage the creator's pair, use an unrestricted key owned by a different active workspace admin. Configure the existing collection UUID, creator UUID, and `permission = "admin"`, then import `collection_id/user_id`. Import does not change the grant. Review the plan before any permission change; the server can refuse removal or downgrade of the last stored collection-admin grant across direct user and group grants.
+
+If a failed create retained a trusted pair ID and the grant exists, fix the error and untaint that resource to reconcile in place. Import the existing pair if state was lost. A retained pair ID does not prove the write committed. See the [direct-grant recovery instructions](https://registry.terraform.io/providers/glitchedmob/outline/latest/docs/resources/collection_user#failed-create-recovery) before accepting replacement.
 
 ## Stop managing without deleting
 

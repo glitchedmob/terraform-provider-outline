@@ -7,7 +7,7 @@ description: |-
 
 # outline_collection_group
 
-Manages one explicit collection/group grant and its collection permission. It does not create or delete either parent, change group names or members, edit default collection access, or manage direct user grants or document grants. Destroy removes only the configured collection/group pair. Other grants and default workspace access can still give users access to the collection.
+Manages one explicit collection/group grant and its collection permission. It does not create or delete either parent, change group names or members, edit default collection access, or manage direct user grants or document grants. Destroy removes only the configured collection/group pair. Use the [collection user resource](https://registry.terraform.io/providers/glitchedmob/outline/latest/docs/resources/collection_user) for a separate direct user grant. Other grants and default workspace access can still give users access to the collection.
 
 Use an unrestricted API key owned by an active workspace admin. The provider verifies the caller for every operation, including refresh and import. This resource targets Outline 1.10.1 only.
 

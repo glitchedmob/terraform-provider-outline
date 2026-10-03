@@ -58,6 +58,14 @@ Changing the role of a suspended account temporarily activates it, changes the r
 
 Role defaults still apply to imported accounts. Configure `role` to match a non-member account before applying, or Terraform will plan to change it to member.
 
+## Assign workspace access separately
+
+An account's workspace role, group memberships, collection defaults, and explicit collection grants are separate. Use `outline_group_member` for a manual group membership, `outline_collection_group` for a group grant, and `outline_collection_user` for a direct user grant. The [integrated IAM example](https://github.com/glitchedmob/terraform-provider-outline/tree/main/examples/iam) connects all six resources and all three lookups.
+
+Direct grants can target pending, suspended, guest, or viewer accounts. They do not activate a suspended account or prove that the target can sign in. Stored grant permission is not a summary of effective access; role-dependent server policies still apply. The direct user-grant resource refuses the current API-key owner's pair during every operation, including read and import.
+
+Outline creates an unavoidable direct admin grant for a collection's creator. A new grant resource never silently adopts it. Manage that pair only intentionally, using a different active admin's key and importing the existing `collection_id/user_id`. The provider does not manage documents, document grants, or API keys.
+
 ## Email changes and import
 
 The provider does not implement Outline's email-change confirmation flow. Complete any rename outside Terraform. Any change to the configured `email` requires replacement, including a casing-only edit. Replacement does not rename the old account or transfer memberships or content. The default destroy policy leaves the old account suspended, then Terraform invites a separate account for the new email.
