@@ -19,13 +19,14 @@ import (
 )
 
 type userModel struct {
-	ID                types.String `tfsdk:"id"`
-	Email             types.String `tfsdk:"email"`
-	Name              types.String `tfsdk:"name"`
-	Role              types.String `tfsdk:"role"`
-	Suspended         types.Bool   `tfsdk:"suspended"`
-	SuppressEmail     types.Bool   `tfsdk:"suppress_email"`
-	DeletePermanently types.Bool   `tfsdk:"delete_permanently"`
+	ID                                    types.String `tfsdk:"id"`
+	Email                                 types.String `tfsdk:"email"`
+	Name                                  types.String `tfsdk:"name"`
+	Role                                  types.String `tfsdk:"role"`
+	Suspended                             types.Bool   `tfsdk:"suspended"`
+	SuppressEmail                         types.Bool   `tfsdk:"suppress_email"`
+	DeletePermanently                     types.Bool   `tfsdk:"delete_permanently"`
+	AllowTemporaryActivationForRoleChange types.Bool   `tfsdk:"allow_temporary_activation_for_role_change"`
 }
 
 type userLookupModel struct {
@@ -304,6 +305,12 @@ func (a *apiClient) updateUser(ctx context.Context, current *client.User, plan u
 	role := client.UserRole(plan.Role.ValueString())
 	if !role.Valid() {
 		return user, errors.New("unsupported user role; use admin, member, viewer, or guest")
+	}
+	// Enforce against the freshly read account, not Terraform's prior state.
+	// Refusal must precede compensation too: a rejected operation must not write.
+	if *current.IsSuspended && *current.Role != role && plan.Suspended.ValueBool() &&
+		(plan.AllowTemporaryActivationForRoleChange.IsNull() || plan.AllowTemporaryActivationForRoleChange.IsUnknown() || !plan.AllowTemporaryActivationForRoleChange.ValueBool()) {
+		return user, errors.New("refusing to temporarily activate a suspended account to change its role while suspended = true: Outline 1.10.1 cannot change the role while keeping the account continuously suspended. Keep the current role, or explicitly set allow_temporary_activation_for_role_change = true to accept restored access during the change and the risk of failed resuspension. Set suspended = false only if you intend to reactivate the account")
 	}
 	// Install compensation before activation. A failed response does not prove
 	// that a write failed to commit. Desired suspension also applies to users

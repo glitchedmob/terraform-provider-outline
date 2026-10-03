@@ -24,6 +24,7 @@ func userTestProtocolConfig(t *testing.T, values map[string]any, dataSource bool
 	attributes := map[string]tftypes.Type{"id": tftypes.String, "email": tftypes.String, "name": tftypes.String, "role": tftypes.String, "suspended": tftypes.Bool}
 	if !dataSource {
 		attributes["suppress_email"], attributes["delete_permanently"] = tftypes.Bool, tftypes.Bool
+		attributes["allow_temporary_activation_for_role_change"] = tftypes.Bool
 	}
 	fields := make(map[string]tftypes.Value, len(attributes))
 	for name, typ := range attributes {
@@ -50,7 +51,7 @@ func TestUserProtocolValidation(t *testing.T) {
 		{"email casing", false, map[string]any{"email": "OIDC@EXAMPLE.COM", "suspended": false}, false},
 		{"www local email", false, map[string]any{"email": "www.person@example.com", "suspended": false}, false},
 		{"www domain email", false, map[string]any{"email": "oidc@www.example.com", "suspended": false}, false},
-		{"all resource fields", false, map[string]any{"email": userTestEmail, "suspended": false, "name": "OIDC User", "role": "guest", "suppress_email": false, "delete_permanently": true}, false},
+		{"all resource fields", false, map[string]any{"email": userTestEmail, "suspended": false, "name": "OIDC User", "role": "guest", "suppress_email": false, "delete_permanently": true, "allow_temporary_activation_for_role_change": true}, false},
 		{"missing email", false, map[string]any{"suspended": false}, true},
 		{"missing suspension", false, map[string]any{"email": userTestEmail}, true},
 		{"empty email", false, map[string]any{"email": "", "suspended": false}, true},
@@ -84,7 +85,7 @@ func TestUserProtocolValidation(t *testing.T) {
 		{"unsupported role", false, map[string]any{"email": userTestEmail, "suspended": false, "role": "superadmin"}, true},
 		{"uppercase role", false, map[string]any{"email": userTestEmail, "suspended": false, "role": "Member"}, true},
 		{"computed ID configured", false, map[string]any{"id": userTestID, "email": userTestEmail, "suspended": false}, true},
-		{"unknown resource fields", false, map[string]any{"email": tftypes.UnknownValue, "suspended": tftypes.UnknownValue, "role": tftypes.UnknownValue, "name": tftypes.UnknownValue}, false},
+		{"unknown resource fields", false, map[string]any{"email": tftypes.UnknownValue, "suspended": tftypes.UnknownValue, "role": tftypes.UnknownValue, "name": tftypes.UnknownValue, "allow_temporary_activation_for_role_change": tftypes.UnknownValue}, false},
 		{"data ID", true, map[string]any{"id": userTestID}, false},
 		{"data email", true, map[string]any{"email": userTestEmail}, false},
 		{"data neither", true, map[string]any{}, true},
@@ -141,7 +142,7 @@ func TestUserSchemaAndConfigure(t *testing.T) {
 	}
 	var schema resource.SchemaResponse
 	r.Schema(t.Context(), resource.SchemaRequest{}, &schema)
-	if schema.Diagnostics.HasError() || schema.Schema.ValidateImplementation(t.Context()).HasError() || len(schema.Schema.Attributes) != 7 {
+	if schema.Diagnostics.HasError() || schema.Schema.ValidateImplementation(t.Context()).HasError() || len(schema.Schema.Attributes) != 8 {
 		t.Fatalf("resource schema: %v", schema)
 	}
 	id := schema.Schema.Attributes["id"].(resourceschema.StringAttribute)
@@ -152,7 +153,7 @@ func TestUserSchemaAndConfigure(t *testing.T) {
 	if !id.Computed || id.Optional || id.Required || len(id.PlanModifiers) != 1 || !email.Required || email.Optional || email.Computed || len(email.PlanModifiers) != 1 || !name.Optional || !name.Computed || name.Required || name.Default != nil || !role.Optional || !role.Computed || role.Default == nil || !suspended.Required || suspended.Optional || suspended.Computed || suspended.Default != nil {
 		t.Fatalf("incorrect resource attribute flags: %v", schema.Schema.Attributes)
 	}
-	for _, field := range []string{"suppress_email", "delete_permanently"} {
+	for _, field := range []string{"suppress_email", "delete_permanently", "allow_temporary_activation_for_role_change"} {
 		attribute := schema.Schema.Attributes[field].(resourceschema.BoolAttribute)
 		if !attribute.Optional || !attribute.Computed || attribute.Required || attribute.Default == nil {
 			t.Fatalf("missing %s default", field)
@@ -164,7 +165,7 @@ func TestUserSchemaAndConfigure(t *testing.T) {
 		t.Fatalf("protocol schema: %v %v", protocol, err)
 	}
 	for label, schema := range map[string]*tfprotov6.Schema{"resource": protocol.ResourceSchemas["outline_user"], "data source": protocol.DataSourceSchemas["outline_user"]} {
-		wantCount := 7
+		wantCount := 8
 		if label == "data source" {
 			wantCount = 5
 		}
@@ -173,7 +174,7 @@ func TestUserSchemaAndConfigure(t *testing.T) {
 		}
 		for _, attribute := range schema.Block.Attributes {
 			wantType := tftypes.String
-			if attribute.Name == "suspended" || attribute.Name == "suppress_email" || attribute.Name == "delete_permanently" {
+			if attribute.Name == "suspended" || attribute.Name == "suppress_email" || attribute.Name == "delete_permanently" || attribute.Name == "allow_temporary_activation_for_role_change" {
 				wantType = tftypes.Bool
 			}
 			if !attribute.Type.Equal(wantType) || attribute.Sensitive || attribute.Description == "" {
@@ -225,7 +226,7 @@ func TestUserImportAndUUIDValidation(t *testing.T) {
 			}
 			if valid {
 				got := userTestStateModel(t, response.State)
-				if got.ID.ValueString() != id || !got.SuppressEmail.ValueBool() || got.DeletePermanently.IsNull() || got.DeletePermanently.ValueBool() || !got.Email.IsNull() || !got.Suspended.IsNull() {
+				if got.ID.ValueString() != id || !got.SuppressEmail.ValueBool() || got.DeletePermanently.IsNull() || got.DeletePermanently.ValueBool() || got.AllowTemporaryActivationForRoleChange != types.BoolValue(false) || !got.Email.IsNull() || !got.Suspended.IsNull() {
 					t.Fatalf("import state: %+v", got)
 				}
 			} else {
@@ -267,7 +268,7 @@ func TestUserProtocolPlanDefaultsIdentityAndReplacement(t *testing.T) {
 				}
 				prior := &null
 				if existing {
-					prior = userTestProtocolConfig(t, map[string]any{"id": userTestID, "email": userTestEmail, "name": "OIDC User", "role": "member", "suspended": false, "suppress_email": true, "delete_permanently": false}, false)
+					prior = userTestProtocolConfig(t, map[string]any{"id": userTestID, "email": userTestEmail, "name": "OIDC User", "role": "member", "suspended": false, "suppress_email": true, "delete_permanently": false, "allow_temporary_activation_for_role_change": false}, false)
 				}
 				email := userTestEmail
 				if changeEmail {
@@ -275,7 +276,7 @@ func TestUserProtocolPlanDefaultsIdentityAndReplacement(t *testing.T) {
 				}
 				response, err := server.PlanResourceChange(t.Context(), &tfprotov6.PlanResourceChangeRequest{TypeName: "outline_user", PriorState: prior,
 					Config:           userTestProtocolConfig(t, map[string]any{"email": email, "suspended": true}, false),
-					ProposedNewState: userTestProtocolConfig(t, map[string]any{"id": tftypes.UnknownValue, "email": email, "name": tftypes.UnknownValue, "role": tftypes.UnknownValue, "suspended": true, "suppress_email": tftypes.UnknownValue, "delete_permanently": tftypes.UnknownValue}, false),
+					ProposedNewState: userTestProtocolConfig(t, map[string]any{"id": tftypes.UnknownValue, "email": email, "name": tftypes.UnknownValue, "role": tftypes.UnknownValue, "suspended": true, "suppress_email": tftypes.UnknownValue, "delete_permanently": tftypes.UnknownValue, "allow_temporary_activation_for_role_change": tftypes.UnknownValue}, false),
 				})
 				if err != nil || protocolHasError(response.Diagnostics) || response.PlannedState == nil {
 					t.Fatalf("plan: %v %v", response, err)
@@ -299,7 +300,7 @@ func TestUserProtocolPlanDefaultsIdentityAndReplacement(t *testing.T) {
 				if err := fields["role"].As(&role); err != nil || role != "member" {
 					t.Fatalf("role default: %q %v", role, err)
 				}
-				for field, want := range map[string]bool{"suppress_email": true, "delete_permanently": false, "suspended": true} {
+				for field, want := range map[string]bool{"suppress_email": true, "delete_permanently": false, "suspended": true, "allow_temporary_activation_for_role_change": false} {
 					var got bool
 					if err := fields[field].As(&got); err != nil || got != want {
 						t.Fatalf("%s=%t want=%t: %v", field, got, want, err)

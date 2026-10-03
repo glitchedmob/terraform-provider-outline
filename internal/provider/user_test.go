@@ -54,6 +54,7 @@ func userTestModel() userModel {
 		ID: types.StringValue(userTestID), Email: types.StringValue(userTestEmail), Name: types.StringValue("OIDC User"),
 		Role: types.StringValue("member"), Suspended: types.BoolValue(false),
 		SuppressEmail: types.BoolValue(true), DeletePermanently: types.BoolValue(false),
+		AllowTemporaryActivationForRoleChange: types.BoolValue(false),
 	}
 }
 
@@ -588,6 +589,7 @@ func TestUserRoleOrderingAndFailureRestoration(t *testing.T) {
 			})}
 			model := userTestModel()
 			model.Role, model.Name, model.Suspended = types.StringValue("guest"), types.StringValue("Updated"), types.BoolValue(tc.finalSuspended)
+			model.AllowTemporaryActivationForRoleChange = types.BoolValue(tc.finalSuspended)
 			response := userTestUpdate(t, r, model, true)
 			if response.Diagnostics.HasError() != (tc.fail != "") {
 				t.Fatalf("update diagnostics: %v", response.Diagnostics)
@@ -1616,6 +1618,7 @@ func TestUserCommittedActivationWithInvalidResponseForcesTrustedSuspension(t *te
 			})}
 			model := userTestModel()
 			model.Role, model.Name, model.Suspended = types.StringValue("guest"), types.StringValue("Updated"), types.BoolValue(true)
+			model.AllowTemporaryActivationForRoleChange = types.BoolValue(true)
 			response := userTestUpdate(t, r, model, true)
 			groupTestDiagnostics(t, response.Diagnostics, tc.want)
 			got := userTestStateModel(t, response.State)
@@ -1736,6 +1739,7 @@ func TestUserCanceledRoleRequestUsesDetachedSuspensionCleanup(t *testing.T) {
 	r := &userResource{api: api}
 	model := userTestModel()
 	model.Role, model.Suspended = types.StringValue("guest"), types.BoolValue(true)
+	model.AllowTemporaryActivationForRoleChange = types.BoolValue(true)
 	plan := userTestPlan(t, r, model)
 	result := make(chan resource.UpdateResponse, 1)
 	go func() {

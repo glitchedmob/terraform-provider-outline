@@ -139,6 +139,7 @@ resource "outline_user" "test" {
   email = "OIDC@EXAMPLE.COM"
   role = "guest"
   suspended = true
+  allow_temporary_activation_for_role_change = true
 }
 `, providerAddress, server.URL+"/api", groupTestKey))
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
@@ -178,6 +179,7 @@ resource "outline_user" "test" {
 		want := map[string]any{
 			"id": userTestID, "email": "OIDC@EXAMPLE.COM", "name": "Pending user", "role": wantRole,
 			"suspended": true, "suppress_email": true, "delete_permanently": false,
+			"allow_temporary_activation_for_role_change": true,
 		}
 		if instance.Status != wantStatus || instance.Deposed != "" || !reflect.DeepEqual(instance.Attributes, want) {
 			t.Fatalf("unexpected persisted instance: %+v; want status=%q attributes=%v", instance, wantStatus, want)
