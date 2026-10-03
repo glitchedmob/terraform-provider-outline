@@ -23,6 +23,7 @@ func TestCollectionGroupBadUpsertResponseRetainsTrustedPair(t *testing.T) {
 			t.Run(operation+"/"+failure, func(t *testing.T) {
 				var mu sync.Mutex
 				writes, lists := 0, 0
+				var readQuery *string
 				members := []client.GroupMembership{}
 				if operation == "update" {
 					members = append(members, cgUnitGrant(cgUnitGroupID, client.PermissionRead))
@@ -35,7 +36,7 @@ func TestCollectionGroupBadUpsertResponseRetainsTrustedPair(t *testing.T) {
 					}
 					if req.URL.Path == "/api/collections.group_memberships" {
 						lists++
-						cgUnitOffset(t, w, req)
+						cgUnitOffset(t, w, req, readQuery)
 						groupTestEncode(t, w, cgUnitEnvelope(members, 0, len(members), false))
 						return
 					}
@@ -161,6 +162,9 @@ func TestCollectionGroupBadUpsertResponseRetainsTrustedPair(t *testing.T) {
 					t.Fatal("diagnostics leaked API credentials")
 				}
 				// Refresh recovers the committed permission without another write.
+				mu.Lock()
+				readQuery = cgUnitGroup(cgUnitGroupID).Name
+				mu.Unlock()
 				diagnostics, state = cgUnitOperation(t, r, "read", cgUnitStateModel(t, state), desired)
 				mu.Lock()
 				gotWrites = writes

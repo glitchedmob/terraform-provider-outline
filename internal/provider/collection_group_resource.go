@@ -121,7 +121,7 @@ func (r *collectionGroupResource) Read(ctx context.Context, req resource.ReadReq
 	collection, group, err := state.pair()
 	var member *client.GroupMembership
 	if err == nil {
-		member, err = r.api.observeCollectionGroup(ctx, collection, group)
+		member, err = r.api.refreshCollectionGroup(ctx, collection, group)
 	}
 	if errors.Is(err, errNotFound) || err == nil && member == nil {
 		resp.State.RemoveResource(ctx)

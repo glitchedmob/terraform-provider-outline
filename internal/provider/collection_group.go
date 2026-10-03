@@ -90,11 +90,15 @@ func validateCollectionGroup(member *client.GroupMembership, collection, group u
 // Never read the groups.list preview or effective access policies. Finding the
 // pair early is not enough: all pages must validate before a match or absence.
 func (a *apiClient) readCollectionGroupPages(ctx context.Context, collection, group uuid.UUID) (*client.GroupMembership, error) {
+	return a.readCollectionGroupQueryPages(ctx, collection, group, nil)
+}
+
+func (a *apiClient) readCollectionGroupQueryPages(ctx context.Context, collection, group uuid.UUID, query *string) (*client.GroupMembership, error) {
 	limit, offset, total := 100, 0, -1
 	seenGroups, seenGrants := make(map[uuid.UUID]bool), make(map[string]bool)
 	var match *client.GroupMembership
 	for {
-		r, err := a.CollectionsGroupMembershipsWithResponse(ctx, client.CollectionsGroupMembershipsJSONRequestBody{Id: collection, Limit: &limit, Offset: &offset})
+		r, err := a.CollectionsGroupMembershipsWithResponse(ctx, client.CollectionsGroupMembershipsJSONRequestBody{Id: collection, Limit: &limit, Offset: &offset, Query: query})
 		if r == nil {
 			return nil, a.checkResponse("collections.group_memberships", nil, nil, err)
 		}
@@ -155,6 +159,16 @@ func (a *apiClient) readCollectionGroupPages(ctx context.Context, collection, gr
 }
 
 func (a *apiClient) observeCollectionGroup(ctx context.Context, collection, group uuid.UUID) (*client.GroupMembership, error) {
+	return a.observeCollectionGroupWithRefresh(ctx, collection, group, false)
+}
+
+// Refresh audits the complete name-filtered result for positive observations;
+// mutations and import still audit the unfiltered collection grant list.
+func (a *apiClient) refreshCollectionGroup(ctx context.Context, collection, group uuid.UUID) (*client.GroupMembership, error) {
+	return a.observeCollectionGroupWithRefresh(ctx, collection, group, true)
+}
+
+func (a *apiClient) observeCollectionGroupWithRefresh(ctx context.Context, collection, group uuid.UUID, refresh bool) (*client.GroupMembership, error) {
 	if _, err := a.requireIAMAdmin(ctx, "outline_collection_group"); err != nil {
 		return nil, err
 	}
@@ -167,8 +181,18 @@ func (a *apiClient) observeCollectionGroup(ctx context.Context, collection, grou
 	}
 	// Do not call managedGroup. The release authorizes group read for collection
 	// grants; external synchronization restricts name/user membership edits only.
-	if _, err = a.readGroup(ctx, group); err != nil {
+	target, err := a.readGroup(ctx, group)
+	if err != nil {
 		return nil, err
+	}
+	if refresh {
+		if query := membershipRefreshQuery(target.Name); query != nil {
+			member, err := a.readCollectionGroupQueryPages(ctx, collection, group, query)
+			if err != nil || member != nil {
+				return member, err
+			}
+			// A valid filtered miss cannot prove absence after a concurrent rename.
+		}
 	}
 	return a.readCollectionGroupPages(ctx, collection, group)
 }

@@ -26,6 +26,7 @@ func TestCollectionUserBadUpsertResponseRetainsTrustedPair(t *testing.T) {
 			t.Run(operation+"/"+failure, func(t *testing.T) {
 				var mu sync.Mutex
 				writes, lists := 0, 0
+				var readQuery *string
 				members := []client.Membership{}
 				if operation == "update" {
 					members = append(members, cuUnitGrant(cuUnitUserID, client.PermissionRead))
@@ -38,7 +39,7 @@ func TestCollectionUserBadUpsertResponseRetainsTrustedPair(t *testing.T) {
 					}
 					if req.URL.Path == "/api/collections.memberships" {
 						lists++
-						cuUnitOffset(t, w, req)
+						cuUnitOffset(t, w, req, readQuery)
 						groupTestEncode(t, w, cuUnitEnvelope(members, 0, len(members), false))
 						return
 					}
@@ -199,6 +200,9 @@ func TestCollectionUserBadUpsertResponseRetainsTrustedPair(t *testing.T) {
 					t.Fatal("diagnostics leaked API credentials")
 				}
 				// Refresh recovers the committed permission without another write.
+				mu.Lock()
+				readQuery = cuUnitParentUser(cuUnitUserID).Name
+				mu.Unlock()
 				diagnostics, state = cuUnitOperation(t, r, "read", cuUnitStateModel(t, state), desired)
 				mu.Lock()
 				gotWrites = writes

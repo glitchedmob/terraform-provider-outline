@@ -125,7 +125,13 @@ func (r *groupMemberResource) Read(ctx context.Context, req resource.ReadRequest
 	group, user, err := state.pair()
 	var member *client.GroupUser
 	if err == nil {
-		member, err = r.api.observeGroupMember(ctx, group, user)
+		// ImportState sets only the pair. Its following Read discovers permission
+		// with the original full-list audit, not the refresh-only query path.
+		if state.Permission.IsNull() || state.Permission.IsUnknown() {
+			member, err = r.api.observeGroupMember(ctx, group, user)
+		} else {
+			member, err = r.api.refreshGroupMember(ctx, group, user)
+		}
 	}
 	if errors.Is(err, errNotFound) || (err == nil && member == nil) {
 		resp.State.RemoveResource(ctx)

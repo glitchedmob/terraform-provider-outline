@@ -53,7 +53,7 @@ func TestCollectionUserTargetRolesSuspensionAndPublicPresenters(t *testing.T) {
 								cuUnitBody(t, w, req, map[string]any{"id": cuUnitUserID})
 								groupTestEncode(t, w, userTestEnvelope(&target))
 							case "/api/collections.memberships":
-								cuUnitOffset(t, w, req)
+								cuUnitOffset(t, w, req, grantTestReadQuery(operation, target.Name))
 								groupTestEncode(t, w, envelope(members, false))
 							case "/api/collections.add_user":
 								writes++

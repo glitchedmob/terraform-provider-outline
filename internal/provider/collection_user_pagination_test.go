@@ -49,7 +49,7 @@ func TestCollectionUserPaginationCompleteEarlyLateAndAbsent(t *testing.T) {
 					}
 					switch req.URL.Path {
 					case "/api/collections.memberships":
-						offset := cuUnitOffset(t, w, req)
+						offset := cuUnitOffset(t, w, req, grantTestReadQuery(operation, cuUnitParentUser(cuUnitUserID).Name))
 						offsets = append(offsets, offset)
 						if offset != 0 && offset != 100 && offset != 200 {
 							t.Errorf("unexpected offset %d", offset)
@@ -96,6 +96,11 @@ func TestCollectionUserPaginationCompleteEarlyLateAndAbsent(t *testing.T) {
 						t.Fatalf("late pair: %v", diagnostics)
 					}
 				case "read":
+					if target == -1 {
+						// A broad response can ignore query. Its filtered miss still
+						// needs a complete unfiltered absence check.
+						wantOffsets = append(wantOffsets, 0, 100, 200)
+					}
 					if diagnostics.HasError() || target == -1 && !state.Raw.IsNull() || target != -1 && cuUnitStateModel(t, state) != desired {
 						t.Fatalf("refresh: %v", diagnostics)
 					}
@@ -151,7 +156,7 @@ func TestCollectionUserLaterMalformedPagesRetainState(t *testing.T) {
 						w.WriteHeader(http.StatusBadRequest)
 						return
 					}
-					offset := cuUnitOffset(t, w, req)
+					offset := cuUnitOffset(t, w, req, grantTestReadQuery(operation, cuUnitParentUser(cuUnitUserID).Name))
 					calls++
 					if calls == 1 {
 						if offset != 0 {

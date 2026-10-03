@@ -98,18 +98,11 @@ func cgUnitBody(t *testing.T, w http.ResponseWriter, req *http.Request, want map
 	}
 }
 
-func cgUnitOffset(t *testing.T, w http.ResponseWriter, req *http.Request) int {
+// By default require an unfiltered list. A caller may permit the fresh name
+// query only while exercising Read; permission filters are never allowed.
+func cgUnitOffset(t *testing.T, w http.ResponseWriter, req *http.Request, allowedQuery ...*string) int {
 	t.Helper()
-	var body map[string]any
-	if !groupTestDecode(t, w, req, &body) {
-		return -1
-	}
-	offset, ok := body["offset"].(float64)
-	if !ok || !reflect.DeepEqual(body, map[string]any{"id": cgUnitCollectionID, "limit": float64(100), "offset": offset}) {
-		t.Errorf("filtered or incomplete grant list request: %v", body)
-		return -1
-	}
-	return int(offset)
+	return grantTestOffset(t, w, req, cgUnitCollectionID, allowedQuery...)
 }
 
 func cgUnitParents(t *testing.T, w http.ResponseWriter, req *http.Request) bool {
@@ -211,6 +204,7 @@ func TestCollectionGroupLifecycleRequestShapesAndNoCollateral(t *testing.T) {
 	beforeGroup := group
 	var writes []string
 	lists := 0
+	var readQuery *string
 	desiredPermission := client.PermissionRead
 	r := &collectionGroupResource{api: cgUnitClient(t, func(w http.ResponseWriter, req *http.Request) {
 		switch req.URL.Path {
@@ -222,7 +216,7 @@ func TestCollectionGroupLifecycleRequestShapesAndNoCollateral(t *testing.T) {
 			groupTestEncode(t, w, map[string]any{"ok": true, "status": 200, "data": group})
 		case "/api/collections.group_memberships":
 			lists++
-			cgUnitOffset(t, w, req)
+			cgUnitOffset(t, w, req, readQuery)
 			groupTestEncode(t, w, cgUnitEnvelope(members, 0, len(members), false))
 		case "/api/collections.add_group":
 			cgUnitBody(t, w, req, map[string]any{"id": cgUnitCollectionID, "groupId": cgUnitGroupID, "permission": string(desiredPermission)})
@@ -264,7 +258,9 @@ func TestCollectionGroupLifecycleRequestShapesAndNoCollateral(t *testing.T) {
 	// The grant row UUID is not Terraform's identity, even if an upsert or
 	// outside change replaces the row while keeping the same pair.
 	members[1].Id = groupTestPointer(uuid.NewString())
+	readQuery = group.Name
 	diagnostics, state = cgUnitOperation(t, r, "read", cgUnitModel(), current)
+	readQuery = nil
 	if diagnostics.HasError() || cgUnitStateModel(t, state) != current || len(writes) != 3 {
 		t.Fatalf("permission drift: %v", diagnostics)
 	}
@@ -272,7 +268,9 @@ func TestCollectionGroupLifecycleRequestShapesAndNoCollateral(t *testing.T) {
 	if diagnostics.HasError() || lists != 7 {
 		t.Fatalf("delete must confirm removal with the full list: %v lists=%d", diagnostics, lists)
 	}
+	readQuery = group.Name
 	diagnostics, state = cgUnitOperation(t, r, "read", current, current)
+	readQuery = nil
 	if diagnostics.HasError() || !state.Raw.IsNull() {
 		t.Fatalf("missing grant: %v", diagnostics)
 	}
