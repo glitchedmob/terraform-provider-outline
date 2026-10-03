@@ -35,13 +35,19 @@ type acceptanceAPI struct {
 
 func newAcceptanceAPI(t *testing.T) *acceptanceAPI {
 	t.Helper()
+	return newAcceptanceAPIWithOverrides(t)
+}
+
+// Overrides belong to the requesting test, never to ambient production settings.
+func newAcceptanceAPIWithOverrides(t *testing.T, overrides ...string) *acceptanceAPI {
+	t.Helper()
 	if os.Getenv("TF_ACC") != "1" {
 		t.Skip("set TF_ACC=1 to start a disposable Outline acceptance stack")
 	}
 	// Do not use ambient credentials, including credentials inherited by Terraform.
 	t.Setenv("OUTLINE_API_KEY", "")
 	t.Setenv("OUTLINE_BASE_URL", "")
-	baseURL, key, container := startAcceptanceStack(t)
+	baseURL, key, container := startAcceptanceStack(t, overrides...)
 	return acceptanceAPIWithCredentials(t, baseURL, key, container)
 }
 
@@ -76,37 +82,43 @@ func acceptanceLoopbackPort(t *testing.T) string {
 	return port
 }
 
-func startAcceptanceStack(t *testing.T) (string, string, testcontainers.Container) {
-	return startAcceptanceStackWithOIDC(t, "")
+type acceptanceStackOptions struct {
+	overrides        []string
+	env              map[string]string
+	omitServiceLogs  bool
+	loopbackEndpoint bool
 }
 
-func startAcceptanceStackWithOIDC(t *testing.T, oidcPort string) (string, string, testcontainers.Container) {
+func startAcceptanceStack(t *testing.T, overrides ...string) (string, string, testcontainers.Container) {
+	t.Helper()
+	return startAcceptanceStackWithOptions(t, acceptanceStackOptions{overrides: overrides})
+}
+
+func startAcceptanceStackWithOptions(t *testing.T, options acceptanceStackOptions) (string, string, testcontainers.Container) {
 	t.Helper()
 	port := acceptanceLoopbackPort(t)
-	files := []string{"../../integration/compose.yml"}
-	if oidcPort != "" {
-		files = append(files, "../../integration/compose.oidc.yml")
-	}
+	files := append([]string{"../../integration/compose.yml"}, options.overrides...)
 	stack, err := compose.NewDockerComposeWith(compose.WithStackFiles(files...))
 	if err != nil {
 		t.Fatalf("create Outline stack: %s", err)
 	}
-	stackEnv := map[string]string{"OUTLINE_TEST_PORT": port}
-	if oidcPort != "" {
-		stackEnv["OUTLINE_OIDC_TEST_PORT"] = oidcPort
+	stackEnv := make(map[string]string, len(options.env)+2)
+	for name, value := range options.env {
+		stackEnv[name] = value
 	}
+	stackEnv["OUTLINE_TEST_PORT"] = port
 	if version := os.Getenv("OUTLINE_VERSION"); version != "" {
 		stackEnv["OUTLINE_VERSION"] = version
 	}
 	stack.WithEnv(stackEnv)
 	// Register before Up so failed and partially started stacks lose their volumes too.
 	t.Cleanup(func() {
-		if oidcPort == "" {
-			captureAcceptanceLogs(t, stack)
-		} else {
+		if options.omitServiceLogs {
 			// Auth logs may contain codes, claims, and tokens. Retain no service
-			// logs for the OIDC stack, even on failure or partial startup.
-			t.Log("OIDC stack service logs omitted to protect authentication secrets")
+			// logs for protected stacks, even on failure or partial startup.
+			t.Log("Stack service logs omitted to protect authentication secrets")
+		} else {
+			captureAcceptanceLogs(t, stack)
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
@@ -162,9 +174,9 @@ func startAcceptanceStackWithOIDC(t *testing.T, oidcPort string) (string, string
 	if fixture.APIKey == "" {
 		t.Fatal("Outline bootstrap fixture did not return an API key")
 	}
-	if oidcPort != "" {
-		// Docker may report localhost, but URL and the OAuth callback use
-		// 127.0.0.1. Browser cookies must stay on that same hostname.
+	if options.loopbackEndpoint {
+		// Docker may report localhost. Match the Compose URL's 127.0.0.1
+		// hostname for browser cookies and callbacks.
 		endpoint = "http://127.0.0.1:" + port
 	}
 	return endpoint + "/api", fixture.APIKey, container
