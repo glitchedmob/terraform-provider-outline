@@ -1,0 +1,29 @@
+# Only used by TestAccOIDCFirstLogin, merged with compose.yml.
+services:
+  oidc:
+    # Reuse the pinned image's Node runtime. No extra package install or real IdP.
+    image: docker.getoutline.com/outlinewiki/outline:${OUTLINE_VERSION:-1.10.1}
+    entrypoint: ["node", "/fixtures/oidc-provider.cjs"]
+    ports:
+      - "127.0.0.1:${OUTLINE_OIDC_TEST_PORT:?test runner must choose a port}:8080"
+    environment:
+      OUTLINE_CALLBACK_URL: http://127.0.0.1:${OUTLINE_TEST_PORT}/auth/oidc.callback
+    volumes:
+      - ./oidc-provider.cjs:/fixtures/oidc-provider.cjs:ro
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  outline:
+    environment:
+      OIDC_CLIENT_ID: outline-acceptance
+      OIDC_CLIENT_SECRET: oidc-acceptance-only-secret
+      OIDC_AUTH_URI: http://127.0.0.1:${OUTLINE_OIDC_TEST_PORT}/authorize
+      OIDC_TOKEN_URI: http://oidc:8080/token
+      OIDC_USERINFO_URI: http://oidc:8080/userinfo
+      OIDC_SCOPES: openid profile email
+    depends_on:
+      oidc:
+        condition: service_healthy

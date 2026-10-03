@@ -31,10 +31,14 @@ test:
 	go test -v -cover ./...
 
 # Docker and Terraform are required. Override OUTLINE_VERSION to investigate another release.
-# The 25 serial container tests include shared-stack collection grant and IAM cases.
+# The 26 serial container tests include shared-stack collection grant, IAM, and OIDC cases.
 # The 30m bound timed out in CI during the final user tests after all new IAM cases passed.
 # Allow 35m for the full suite, cold starts, and five-requests-per-second pacing.
 testacc:
 	DOCKER_HOST="$${DOCKER_HOST:-$$(docker context inspect --format '{{.Endpoints.docker.Host}}')}" TF_ACC=1 go test -count=1 -v -timeout 35m -artifacts -outputdir="$(CURDIR)" ./internal/provider -run '^TestAcc'
 
-.PHONY: default build generate check-generated generate-docs validate-docs fmt fmt-check lint test testacc
+# Real released OIDC auth routes, disposable provider, no real IdP credentials.
+testacc-oidc:
+	DOCKER_HOST="$${DOCKER_HOST:-$$(docker context inspect --format '{{.Endpoints.docker.Host}}')}" TF_ACC=1 go test -count=1 -v -timeout 10m -artifacts -outputdir="$(CURDIR)" ./internal/provider -run '^TestAccOIDCFirstLogin$$'
+
+.PHONY: default build generate check-generated generate-docs validate-docs fmt fmt-check lint test testacc testacc-oidc

@@ -42,6 +42,11 @@ func newAcceptanceAPI(t *testing.T) *acceptanceAPI {
 	t.Setenv("OUTLINE_API_KEY", "")
 	t.Setenv("OUTLINE_BASE_URL", "")
 	baseURL, key, container := startAcceptanceStack(t)
+	return acceptanceAPIWithCredentials(t, baseURL, key, container)
+}
+
+func acceptanceAPIWithCredentials(t *testing.T, baseURL, key string, container testcontainers.Container) *acceptanceAPI {
+	t.Helper()
 	api, err := newAPIClient(baseURL, key, 30, "acceptance")
 	if err != nil {
 		t.Fatal(err)
@@ -58,7 +63,7 @@ provider "outline" {
 	}
 }
 
-func startAcceptanceStack(t *testing.T) (string, string, testcontainers.Container) {
+func acceptanceLoopbackPort(t *testing.T) string {
 	t.Helper()
 	listener, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
@@ -68,18 +73,41 @@ func startAcceptanceStack(t *testing.T) (string, string, testcontainers.Containe
 	if err := listener.Close(); err != nil {
 		t.Fatalf("release Outline test port: %s", err)
 	}
-	stack, err := compose.NewDockerComposeWith(compose.WithStackFiles("../../integration/compose.yml"))
+	return port
+}
+
+func startAcceptanceStack(t *testing.T) (string, string, testcontainers.Container) {
+	return startAcceptanceStackWithOIDC(t, "")
+}
+
+func startAcceptanceStackWithOIDC(t *testing.T, oidcPort string) (string, string, testcontainers.Container) {
+	t.Helper()
+	port := acceptanceLoopbackPort(t)
+	files := []string{"../../integration/compose.yml"}
+	if oidcPort != "" {
+		files = append(files, "../../integration/compose.oidc.yml")
+	}
+	stack, err := compose.NewDockerComposeWith(compose.WithStackFiles(files...))
 	if err != nil {
 		t.Fatalf("create Outline stack: %s", err)
 	}
 	stackEnv := map[string]string{"OUTLINE_TEST_PORT": port}
+	if oidcPort != "" {
+		stackEnv["OUTLINE_OIDC_TEST_PORT"] = oidcPort
+	}
 	if version := os.Getenv("OUTLINE_VERSION"); version != "" {
 		stackEnv["OUTLINE_VERSION"] = version
 	}
 	stack.WithEnv(stackEnv)
 	// Register before Up so failed and partially started stacks lose their volumes too.
 	t.Cleanup(func() {
-		captureAcceptanceLogs(t, stack)
+		if oidcPort == "" {
+			captureAcceptanceLogs(t, stack)
+		} else {
+			// Auth logs may contain codes, claims, and tokens. Retain no service
+			// logs for the OIDC stack, even on failure or partial startup.
+			t.Log("OIDC stack service logs omitted to protect authentication secrets")
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
 		if err := stack.Down(ctx, compose.RemoveOrphans(true), compose.RemoveVolumes(true)); err != nil {
@@ -133,6 +161,11 @@ func startAcceptanceStack(t *testing.T) (string, string, testcontainers.Containe
 	}
 	if fixture.APIKey == "" {
 		t.Fatal("Outline bootstrap fixture did not return an API key")
+	}
+	if oidcPort != "" {
+		// Docker may report localhost, but URL and the OAuth callback use
+		// 127.0.0.1. Browser cookies must stay on that same hostname.
+		endpoint = "http://127.0.0.1:" + port
 	}
 	return endpoint + "/api", fixture.APIKey, container
 }
