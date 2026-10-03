@@ -245,6 +245,12 @@ func TestAccGroupLifecycle(t *testing.T) {
 			{Config: api.providerConfig, Check: func(_ *terraform.State) error { return api.acceptanceGroupAbsent(id) }},
 		},
 	})
+	// A wrong delete route must leave both the real group and Terraform state.
+	groupDeleteRoute404Terraform(t, api.apiClient, func(id string) {
+		if _, err := api.acceptanceGroup(id); err != nil {
+			t.Fatalf("proxy delete 404 lost the real group: %v", err)
+		}
+	})
 }
 
 func TestAccGroupMissingStateRecreation(t *testing.T) {

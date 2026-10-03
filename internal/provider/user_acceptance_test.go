@@ -415,6 +415,20 @@ func TestAccUserLifecycle(t *testing.T) {
 			{Config: api.providerConfig, Check: func(_ *terraform.State) error { return api.acceptanceUserRetained(id, email) }},
 		},
 	})
+	// Remove invitation metadata after Outline commits the account. Verify
+	// detached cleanup and truthful tainted state against the real API.
+	for _, failure := range []string{"", "suspend"} {
+		userMalformedInviteTerraform(t, api.apiClient, "malformed-invite-"+failure+"@www.example.invalid", failure, func(id string, suspended bool) {
+			u, err := api.acceptanceUser(id)
+			if err != nil || *u.IsSuspended != suspended {
+				t.Fatalf("malformed invitation cleanup: user=%v err=%v want suspended=%t", u, err, suspended)
+			}
+			owner, err := api.acceptanceUser(actor.Id.String())
+			if err != nil || *owner.IsSuspended || *owner.Role != client.UserRoleAdmin {
+				t.Fatalf("invitation cleanup modified the API owner: %v", err)
+			}
+		})
+	}
 }
 
 func TestAccUserInvitationRoles(t *testing.T) {

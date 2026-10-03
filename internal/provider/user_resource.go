@@ -76,13 +76,21 @@ func (r *userResource) Create(ctx context.Context, req resource.CreateRequest, r
 	}
 	// Preflight the complete list, including suspended users. The invitation
 	// response is still checked because another client can race this request.
-	_, err = r.api.findUser(ctx, plan.Email.ValueString())
-	if err == nil {
-		resp.Diagnostics.AddError("User already exists", "Create never adopts or modifies existing accounts. Import the existing user's UUID instead.")
+	existingIDs := make(map[uuid.UUID]bool)
+	existingEmail := false
+	err = r.api.walkUsers(ctx, func(user *client.User) error {
+		existingIDs[*user.Id] = true
+		if normalizeUserEmail(string(user.Email.GetOrEmpty())) == normalizeUserEmail(plan.Email.ValueString()) {
+			existingEmail = true
+		}
+		return nil
+	})
+	if err != nil {
+		resp.Diagnostics.AddError("Unable to check existing user", err.Error())
 		return
 	}
-	if !errors.Is(err, errNotFound) {
-		resp.Diagnostics.AddError("Unable to check existing user", err.Error())
+	if existingEmail {
+		resp.Diagnostics.AddError("User already exists", "Create never adopts or modifies existing accounts. Import the existing user's UUID instead.")
 		return
 	}
 	email := normalizeUserEmail(plan.Email.ValueString())
@@ -119,9 +127,15 @@ func (r *userResource) Create(ctx context.Context, req resource.CreateRequest, r
 	// Persist only an identity that matches our single invitation, never another
 	// account or the key owner. Do so before envelope/full model validation and
 	// follow-up reads or writes, which can fail after the invitation committed.
-	if user.Id != nil && *user.Id != uuid.Nil && user.Email.IsSpecified() && !user.Email.IsNull() && normalizeUserEmail(string(user.Email.GetOrEmpty())) == email && *user.Id != *actor.Id {
+	if user.Id != nil && *user.Id != uuid.Nil && !existingIDs[*user.Id] && user.Email.IsSpecified() && !user.Email.IsNull() && normalizeUserEmail(string(user.Email.GetOrEmpty())) == email && *user.Id != *actor.Id {
 		initial := plan
 		initial.ID = types.StringValue(user.Id.String())
+		// Preserve observed suspension, not the desired plan, on failed creates.
+		// A missing status is unknown until a validated read or write confirms it.
+		initial.Suspended = types.BoolNull()
+		if user.IsSuspended != nil {
+			initial.Suspended = types.BoolValue(*user.IsSuspended)
+		}
 		if initial.Name.IsNull() || initial.Name.IsUnknown() {
 			initial.Name = types.StringValue(name)
 		}
@@ -137,10 +151,24 @@ func (r *userResource) Create(ctx context.Context, req resource.CreateRequest, r
 	if err == nil {
 		err = protectUserOwner(actor, *user.Id, email)
 	}
+	if err == nil && existingIDs[*user.Id] {
+		err = errors.New("users.invite returned an existing user ID; refusing to adopt or modify it")
+	}
 	if err == nil && (data.Sent == nil || len(*data.Sent) != 1 || normalizeUserEmail((*data.Sent)[0].Email) != email || data.Unsent == nil) {
 		err = errors.New("users.invite: malformed sent/unsent invitation result")
 	}
 	if err != nil {
+		if retained && plan.Suspended.ValueBool() {
+			// Metadata failure must not leave a newly invited account active.
+			// Verify the candidate independently before any compensating write.
+			var stored *client.User
+			stored, err = r.api.recoverInvitedUserSuspension(ctx, actor, *user.Id, email, err)
+			if stored != nil {
+				initial := plan
+				initial.setUser(stored)
+				resp.Diagnostics.Append(resp.State.Set(ctx, &initial)...)
+			}
+		}
 		detail := err.Error()
 		if retained {
 			detail += userRecovery

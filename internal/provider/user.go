@@ -371,11 +371,39 @@ func (a *apiClient) updateUser(ctx context.Context, current *client.User, plan u
 func (a *apiClient) recoverUserSuspension(ctx context.Context, trusted *client.User, operationErr error) (*client.User, error) {
 	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
+	return a.restoreUserSuspension(cleanupCtx, trusted, operationErr)
+}
+
+// A malformed invitation is not authority to mutate its candidate UUID. Require
+// a full stored account matching both the new candidate and expected email.
+// The caller has already ruled out every preflight UUID and the API-key owner.
+func (a *apiClient) recoverInvitedUserSuspension(ctx context.Context, actor *client.User, id uuid.UUID, email string, operationErr error) (*client.User, error) {
+	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
+	stored, err := a.readUser(cleanupCtx, id)
+	if err == nil {
+		err = validateUser(stored, id, email)
+	}
+	if err == nil {
+		err = protectUserOwner(actor, id, email)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("%w; suspension cleanup skipped because the newly invited identity could not be verified: %v; inspect the account before retrying", operationErr, err)
+	}
+	return a.restoreUserSuspension(cleanupCtx, stored, operationErr)
+}
+
+func (a *apiClient) restoreUserSuspension(ctx context.Context, trusted *client.User, operationErr error) (*client.User, error) {
 	forced := *trusted
 	active := false
 	forced.IsSuspended = &active
-	restored, restoreErr := a.setUserSuspended(cleanupCtx, &forced, true)
+	restored, restoreErr := a.setUserSuspended(ctx, &forced, true)
 	if restoreErr != nil {
+		// A validated response can still reject the desired status. Keep that
+		// newer observation rather than claiming the cached status still holds.
+		if restored != nil {
+			trusted = restored
+		}
 		return trusted, fmt.Errorf("%w; restoring suspension also failed: %v; inspect the account before retrying", operationErr, restoreErr)
 	}
 	return restored, operationErr

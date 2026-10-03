@@ -5,6 +5,7 @@ package provider
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/glitchedmob/terraform-provider-outline/internal/client"
 	"github.com/google/uuid"
@@ -192,7 +193,16 @@ func (r *groupResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 	}
 	err = r.api.checkResponse("groups.delete", response.HTTPResponse, response.Body, err)
 	if errors.Is(err, errNotFound) {
-		return
+		// A delete route/proxy 404 does not prove that the group disappeared.
+		// Only the trusted read/full admin-list strategy can establish absence.
+		err = errors.New("groups.delete: HTTP 404 did not establish group absence")
+		_, verifyErr := r.api.readGroup(ctx, id)
+		if errors.Is(verifyErr, errNotFound) {
+			return
+		}
+		if verifyErr != nil {
+			err = fmt.Errorf("%w; cannot establish group absence: %v", err, verifyErr)
+		}
 	}
 	if err == nil {
 		if response.JSON200 == nil {

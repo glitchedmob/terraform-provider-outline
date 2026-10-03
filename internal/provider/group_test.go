@@ -948,7 +948,7 @@ func TestGroupDeleteResponseValidation(t *testing.T) {
 	}{
 		{"success", 200, `{"ok":true,"status":200,"success":true}`, true},
 		{"missing optional status", 200, `{"ok":true,"success":true}`, true},
-		{"already deleted", 404, `{}`, true},
+		{"unverified delete route 404", 404, `{}`, false},
 		{"forbidden", 403, `{"message":"denied"}`, false},
 		{"rate limited", 429, `{}`, false},
 		{"server", 500, `{}`, false},
@@ -985,7 +985,12 @@ func TestGroupDeleteResponseValidation(t *testing.T) {
 			if response.Diagnostics.HasError() == tc.ok || !response.State.Raw.Equal(state.Raw) {
 				t.Fatalf("delete: %v", response.Diagnostics)
 			}
-			if !reflect.DeepEqual(calls, []string{"/api/groups.info", "/api/groups.delete"}) {
+			want := []string{"/api/groups.info", "/api/groups.delete"}
+			if tc.status == http.StatusNotFound {
+				want = append(want, "/api/groups.info")
+				groupTestDiagnostics(t, response.Diagnostics, "HTTP 404")
+			}
+			if !reflect.DeepEqual(calls, want) {
 				t.Fatalf("delete replayed: %v", calls)
 			}
 		})

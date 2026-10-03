@@ -400,7 +400,7 @@ func TestUserCreateRefusesExistingAccount(t *testing.T) {
 			})}
 			response := userTestCreate(t, r, userTestModel())
 			groupTestDiagnostics(t, response.Diagnostics, "never adopts")
-			if response.State.Raw.IsKnown() && !response.State.Raw.IsNull() || !reflect.DeepEqual(calls, []string{"/api/users.list", "/api/users.info"}) {
+			if response.State.Raw.IsKnown() && !response.State.Raw.IsNull() || !reflect.DeepEqual(calls, []string{"/api/users.list"}) {
 				t.Fatalf("existing account adopted: state=%v calls=%v", response.State.Raw, calls)
 			}
 		})
