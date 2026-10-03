@@ -35,13 +35,19 @@ type acceptanceAPI struct {
 
 func newAcceptanceAPI(t *testing.T) *acceptanceAPI {
 	t.Helper()
+	return newAcceptanceAPIWithOverrides(t)
+}
+
+// Overrides belong to the requesting test, never to ambient production settings.
+func newAcceptanceAPIWithOverrides(t *testing.T, overrides ...string) *acceptanceAPI {
+	t.Helper()
 	if os.Getenv("TF_ACC") != "1" {
 		t.Skip("set TF_ACC=1 to start a disposable Outline acceptance stack")
 	}
 	// Do not use ambient credentials, including credentials inherited by Terraform.
 	t.Setenv("OUTLINE_API_KEY", "")
 	t.Setenv("OUTLINE_BASE_URL", "")
-	baseURL, key, container := startAcceptanceStack(t)
+	baseURL, key, container := startAcceptanceStack(t, overrides...)
 	api, err := newAPIClient(baseURL, key, 30, "acceptance")
 	if err != nil {
 		t.Fatal(err)
@@ -58,7 +64,7 @@ provider "outline" {
 	}
 }
 
-func startAcceptanceStack(t *testing.T) (string, string, testcontainers.Container) {
+func startAcceptanceStack(t *testing.T, overrides ...string) (string, string, testcontainers.Container) {
 	t.Helper()
 	listener, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
@@ -68,7 +74,8 @@ func startAcceptanceStack(t *testing.T) (string, string, testcontainers.Containe
 	if err := listener.Close(); err != nil {
 		t.Fatalf("release Outline test port: %s", err)
 	}
-	stack, err := compose.NewDockerComposeWith(compose.WithStackFiles("../../integration/compose.yml"))
+	stackFiles := append([]string{"../../integration/compose.yml"}, overrides...)
+	stack, err := compose.NewDockerComposeWith(compose.WithStackFiles(stackFiles...))
 	if err != nil {
 		t.Fatalf("create Outline stack: %s", err)
 	}

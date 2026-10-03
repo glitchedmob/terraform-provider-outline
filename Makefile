@@ -31,7 +31,7 @@ test:
 	go test -v -cover ./...
 
 # Docker and Terraform are required. Override OUTLINE_VERSION to investigate another release.
-# The 25 serial container tests include shared-stack collection grant and IAM cases.
+# The 26 serial container tests include shared-stack collection grant and IAM cases.
 # The 30m bound timed out in CI during the final user tests after all new IAM cases passed.
 # Allow 35m for the full suite, cold starts, and five-requests-per-second pacing.
 testacc:
