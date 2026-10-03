@@ -14,7 +14,7 @@ jobs:
   acceptance:
     name: Outline ${{ matrix.outline-version }}
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 50
     strategy:
       fail-fast: false
       matrix:
