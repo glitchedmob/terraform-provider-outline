@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -24,6 +25,7 @@ import (
 func TestCollectionUserPartialCreateTerraformRecovery(t *testing.T) {
 	const address = "outline_collection_user.test"
 	var mu sync.Mutex
+	var reading atomic.Bool
 	other := cuUnitGrant(cuUnitOtherUserID, client.PermissionReadWrite)
 	other.Id = groupTestPointer(uuid.NewString())
 	members := []client.Membership{other}
@@ -38,7 +40,7 @@ func TestCollectionUserPartialCreateTerraformRecovery(t *testing.T) {
 		}
 		switch req.URL.Path {
 		case "/api/collections.memberships":
-			cuUnitOffset(t, w, req)
+			cuUnitOffset(t, w, req, grantTestReadQueryFlag(reading.Load(), cuUnitParentUser(cuUnitUserID).Name))
 			groupTestEncode(t, w, cuUnitEnvelope(members, 0, len(members), false))
 		case "/api/collections.add_user":
 			cuUnitBody(t, w, req, map[string]any{"id": cuUnitCollectionID, "userId": cuUnitUserID, "permission": "admin"})
@@ -58,7 +60,7 @@ func TestCollectionUserPartialCreateTerraformRecovery(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 	const providerAddress = "registry.terraform.io/glitchedmob/outline"
-	reattach := groupPartialCreateProvider(t, providerAddress)
+	reattach := groupPartialCreateProvider(t, providerAddress, grantTestTrackReads(&reading))
 	tf := groupPartialCreateTerraform(t, fmt.Sprintf(`
 terraform {
   required_providers {

@@ -83,11 +83,15 @@ func validateGroupMember(member *client.GroupUser, group, user uuid.UUID) error 
 // Never use the groups.list avatar preview or stop early after finding a pair.
 // A match is usable only after the complete, validated page set is stable.
 func (a *apiClient) readGroupMemberPages(ctx context.Context, group, user uuid.UUID) (*client.GroupUser, error) {
+	return a.readGroupMemberQueryPages(ctx, group, user, nil)
+}
+
+func (a *apiClient) readGroupMemberQueryPages(ctx context.Context, group, user uuid.UUID, query *string) (*client.GroupUser, error) {
 	limit, offset, total := 100, 0, -1
 	seen := make(map[uuid.UUID]bool)
 	var match *client.GroupUser
 	for {
-		r, err := a.GroupsMembershipsWithResponse(ctx, client.GroupsMembershipsJSONRequestBody{Id: group, Limit: &limit, Offset: &offset})
+		r, err := a.GroupsMembershipsWithResponse(ctx, client.GroupsMembershipsJSONRequestBody{Id: group, Limit: &limit, Offset: &offset, Query: query})
 		if r == nil {
 			return nil, a.checkResponse("groups.memberships", nil, nil, err)
 		}
@@ -147,6 +151,16 @@ func (a *apiClient) readGroupMemberPages(ctx context.Context, group, user uuid.U
 // Parent absence is established only by the existing release-verified helpers.
 // Membership endpoint errors never trigger their own 403/404 absence fallback.
 func (a *apiClient) observeGroupMember(ctx context.Context, group, user uuid.UUID) (*client.GroupUser, error) {
+	return a.observeGroupMemberWithRefresh(ctx, group, user, false)
+}
+
+// Refresh audits the complete name-filtered result for positive observations;
+// mutation preflights and removal verification still use the unfiltered list.
+func (a *apiClient) refreshGroupMember(ctx context.Context, group, user uuid.UUID) (*client.GroupUser, error) {
+	return a.observeGroupMemberWithRefresh(ctx, group, user, true)
+}
+
+func (a *apiClient) observeGroupMemberWithRefresh(ctx context.Context, group, user uuid.UUID, refresh bool) (*client.GroupUser, error) {
 	if _, err := a.requireIAMAdmin(ctx, "outline_group_member"); err != nil {
 		return nil, err
 	}
@@ -157,8 +171,18 @@ func (a *apiClient) observeGroupMember(ctx context.Context, group, user uuid.UUI
 	if err != nil {
 		return nil, err
 	}
-	if _, err = a.readUser(ctx, user); err != nil {
+	target, err := a.readUser(ctx, user)
+	if err != nil {
 		return nil, err
+	}
+	if refresh {
+		if query := membershipRefreshQuery(target.Name); query != nil {
+			member, err := a.readGroupMemberQueryPages(ctx, group, user, query)
+			if err != nil || member != nil {
+				return member, err
+			}
+			// A valid filtered miss cannot prove absence after a concurrent rename.
+		}
 	}
 	return a.readGroupMemberPages(ctx, group, user)
 }

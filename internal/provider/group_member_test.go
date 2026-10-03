@@ -123,13 +123,14 @@ func TestGroupMemberLifecycleRequestShapesAndCollateral(t *testing.T) {
 	members := []client.GroupUser{memberTestMember(userTestOtherID, client.GroupPermissionAdmin)}
 	other := members[0]
 	var writes []string
+	var readQuery *string
 	r := &groupMemberResource{api: memberTestClient(t, func(w http.ResponseWriter, req *http.Request) {
 		if memberTestParents(t, w, req) {
 			return
 		}
 		switch req.URL.Path {
 		case "/api/groups.memberships":
-			memberTestBody(t, w, req, map[string]any{"id": groupTestID, "limit": float64(100), "offset": float64(0)})
+			grantTestOffset(t, w, req, groupTestID, readQuery)
 			groupTestEncode(t, w, memberTestEnvelope(members, 0, len(members), false))
 		case "/api/groups.add_user", "/api/groups.update_user":
 			permission := client.GroupPermissionMember
@@ -163,7 +164,9 @@ func TestGroupMemberLifecycleRequestShapesAndCollateral(t *testing.T) {
 	}
 	// A permission drift is read, not rewritten during refresh.
 	read := resource.ReadResponse{State: created.State}
+	readQuery = userTestUser().Name
 	r.Read(t.Context(), resource.ReadRequest{State: created.State}, &read)
+	readQuery = nil
 	if read.Diagnostics.HasError() || memberTestState(t, read.State) != model {
 		t.Fatalf("read permission drift: %v", read.Diagnostics)
 	}
@@ -176,7 +179,9 @@ func TestGroupMemberLifecycleRequestShapesAndCollateral(t *testing.T) {
 		t.Fatalf("collateral or wrong mutations: %v", writes)
 	}
 	read = resource.ReadResponse{State: updated.State}
+	readQuery = userTestUser().Name
 	r.Read(t.Context(), resource.ReadRequest{State: updated.State}, &read)
+	readQuery = nil
 	if read.Diagnostics.HasError() || !read.State.Raw.IsNull() {
 		t.Fatalf("missing membership: %v", read.Diagnostics)
 	}
@@ -244,7 +249,7 @@ func TestGroupMemberPaginationCompleteValidatedSet(t *testing.T) {
 }
 
 func TestGroupMemberMalformedPagesNeverProveAbsence(t *testing.T) {
-	for _, failure := range []string{"missing json", "bad envelope", "missing data", "missing members", "missing users", "missing pagination", "short page", "wrong offset", "changed total", "duplicate", "wrong group", "wrong API id", "missing user id", "nil UUID", "invalid UUID", "wrong nested user", "missing nested user", "missing permission", "invalid permission", "missing name", "invalid user role", "missing suspension", "inconsistent users", "duplicate users", "403", "404", "429", "invalid json"} {
+	for _, failure := range []string{"missing json", "bad envelope", "missing data", "missing members", "missing users", "missing pagination", "short page", "wrong offset", "changed total", "duplicate", "wrong group", "wrong API id", "missing user id", "nil UUID", "invalid UUID", "wrong nested user", "missing nested user", "missing permission", "invalid permission", "missing name", "invalid user role", "missing suspension", "inconsistent users", "duplicate users", "400", "403", "404", "429", "500", "invalid json"} {
 		t.Run(failure, func(t *testing.T) {
 			first := make([]client.GroupUser, 100)
 			for i := range first {
@@ -259,6 +264,10 @@ func TestGroupMemberMalformedPagesNeverProveAbsence(t *testing.T) {
 				if req.URL.Path != "/api/groups.memberships" {
 					t.Errorf("unexpected write %s", req.URL.Path)
 					return
+				}
+				offset := grantTestOffset(t, w, req, groupTestID, userTestUser().Name)
+				if offset != pageCalls*100 {
+					t.Errorf("unexpected filtered offset %d", offset)
 				}
 				pageCalls++
 				if pageCalls%2 == 1 {
@@ -323,8 +332,8 @@ func TestGroupMemberMalformedPagesNeverProveAbsence(t *testing.T) {
 				case "missing nested user":
 					m.User = nil
 					d["groupMemberships"] = []client.GroupUser{m}
-				case "403", "404", "429":
-					code := map[string]int{"403": 403, "404": 404, "429": 429}[failure]
+				case "400", "403", "404", "429", "500":
+					code := map[string]int{"400": 400, "403": 403, "404": 404, "429": 429, "500": 500}[failure]
 					w.WriteHeader(code)
 					p = map[string]any{"ok": false, "error": "authorization_error", "message": groupTestKey}
 				}

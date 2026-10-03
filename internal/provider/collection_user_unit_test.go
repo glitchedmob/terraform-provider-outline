@@ -109,18 +109,11 @@ func cuUnitBody(t *testing.T, w http.ResponseWriter, req *http.Request, want map
 	}
 }
 
-func cuUnitOffset(t *testing.T, w http.ResponseWriter, req *http.Request) int {
+// By default require an unfiltered list. A caller may permit the fresh name
+// query only while exercising Read; permission filters are never allowed.
+func cuUnitOffset(t *testing.T, w http.ResponseWriter, req *http.Request, allowedQuery ...*string) int {
 	t.Helper()
-	var body map[string]any
-	if !groupTestDecode(t, w, req, &body) {
-		return -1
-	}
-	offset, ok := body["offset"].(float64)
-	if !ok || !reflect.DeepEqual(body, map[string]any{"id": cuUnitCollectionID, "limit": float64(100), "offset": offset}) {
-		t.Errorf("filtered or incomplete grant list request: %v", body)
-		return -1
-	}
-	return int(offset)
+	return grantTestOffset(t, w, req, cuUnitCollectionID, allowedQuery...)
 }
 
 func cuUnitParents(t *testing.T, w http.ResponseWriter, req *http.Request) bool {
@@ -222,6 +215,7 @@ func TestCollectionUserLifecycleRequestShapesAndNoCollateral(t *testing.T) {
 	beforeUser := user
 	var writes []string
 	lists := 0
+	var readQuery *string
 	desiredPermission := client.PermissionRead
 	r := &collectionUserResource{api: cuUnitClient(t, func(w http.ResponseWriter, req *http.Request) {
 		switch req.URL.Path {
@@ -233,7 +227,7 @@ func TestCollectionUserLifecycleRequestShapesAndNoCollateral(t *testing.T) {
 			groupTestEncode(t, w, userTestEnvelope(&user))
 		case "/api/collections.memberships":
 			lists++
-			cuUnitOffset(t, w, req)
+			cuUnitOffset(t, w, req, readQuery)
 			groupTestEncode(t, w, cuUnitEnvelope(members, 0, len(members), false))
 		case "/api/collections.add_user":
 			cuUnitBody(t, w, req, map[string]any{"id": cuUnitCollectionID, "userId": cuUnitUserID, "permission": string(desiredPermission)})
@@ -275,7 +269,9 @@ func TestCollectionUserLifecycleRequestShapesAndNoCollateral(t *testing.T) {
 	// The grant row UUID is not Terraform's identity, even if an upsert or
 	// outside change replaces the row while keeping the same pair.
 	members[1].Id = groupTestPointer(uuid.NewString())
+	readQuery = user.Name
 	diagnostics, state = cuUnitOperation(t, r, "read", cuUnitModel(), current)
+	readQuery = nil
 	if diagnostics.HasError() || cuUnitStateModel(t, state) != current || len(writes) != 3 {
 		t.Fatalf("permission drift: %v", diagnostics)
 	}
@@ -283,7 +279,9 @@ func TestCollectionUserLifecycleRequestShapesAndNoCollateral(t *testing.T) {
 	if diagnostics.HasError() || lists != 7 {
 		t.Fatalf("delete must confirm removal with the full list: %v lists=%d", diagnostics, lists)
 	}
+	readQuery = user.Name
 	diagnostics, state = cuUnitOperation(t, r, "read", current, current)
+	readQuery = nil
 	if diagnostics.HasError() || !state.Raw.IsNull() {
 		t.Fatalf("missing grant: %v", diagnostics)
 	}

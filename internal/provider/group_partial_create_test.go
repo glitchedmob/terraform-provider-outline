@@ -22,6 +22,7 @@ import (
 	"github.com/hashicorp/terraform-exec/tfexec"
 	tfjson "github.com/hashicorp/terraform-json"
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
+	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov6/tf6server"
 	"github.com/oapi-codegen/nullable"
 )
@@ -223,15 +224,20 @@ resource "outline_group" "test" {
 	}
 }
 
-func groupPartialCreateProvider(t *testing.T, address string) tfexec.ReattachInfo {
+func groupPartialCreateProvider(t *testing.T, address string, wrap ...func(tfprotov6.ProviderServer) tfprotov6.ProviderServer) tfexec.ReattachInfo {
 	t.Helper()
+	factory := providerserver.NewProtocol6(New("unit")())
+	if len(wrap) != 0 {
+		original := factory
+		factory = func() tfprotov6.ProviderServer { return wrap[0](original()) }
+	}
 	// Keep the server alive through cleanup, after testing cancels t.Context().
 	ctx, cancel := context.WithCancel(context.Background())
 	configCh := make(chan *plugin.ReattachConfig, 1)
 	closeCh := make(chan struct{})
 	serveCh := make(chan error, 1)
 	go func() {
-		serveCh <- tf6server.Serve(address, providerserver.NewProtocol6(New("unit")()),
+		serveCh <- tf6server.Serve(address, factory,
 			tf6server.WithDebug(ctx, configCh, closeCh),
 			tf6server.WithGoPluginLogger(hclog.NewNullLogger()),
 			tf6server.WithLoggingSink(t), tf6server.WithoutLogStderrOverride())

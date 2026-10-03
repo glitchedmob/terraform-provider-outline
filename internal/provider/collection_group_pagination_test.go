@@ -44,7 +44,7 @@ func TestCollectionGroupPaginationCompleteEarlyLateAndAbsent(t *testing.T) {
 					}
 					switch req.URL.Path {
 					case "/api/collections.group_memberships":
-						offset := cgUnitOffset(t, w, req)
+						offset := cgUnitOffset(t, w, req, grantTestReadQuery(operation, cgUnitGroup(cgUnitGroupID).Name))
 						offsets = append(offsets, offset)
 						if offset != 0 && offset != 100 && offset != 200 {
 							t.Errorf("unexpected offset %d", offset)
@@ -91,6 +91,11 @@ func TestCollectionGroupPaginationCompleteEarlyLateAndAbsent(t *testing.T) {
 						t.Fatalf("late pair: %v", diagnostics)
 					}
 				case "read":
+					if target == -1 {
+						// A broad response can ignore query. Its filtered miss still
+						// needs a complete unfiltered absence check.
+						wantOffsets = append(wantOffsets, 0, 100, 200)
+					}
 					if diagnostics.HasError() || target == -1 && !state.Raw.IsNull() || target != -1 && cgUnitStateModel(t, state) != desired {
 						t.Fatalf("refresh: %v", diagnostics)
 					}
@@ -143,7 +148,7 @@ func TestCollectionGroupLaterMalformedPagesRetainState(t *testing.T) {
 						w.WriteHeader(http.StatusBadRequest)
 						return
 					}
-					offset := cgUnitOffset(t, w, req)
+					offset := cgUnitOffset(t, w, req, grantTestReadQuery(operation, cgUnitGroup(cgUnitGroupID).Name))
 					calls++
 					if calls == 1 {
 						if offset != 0 {

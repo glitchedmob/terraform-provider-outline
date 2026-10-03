@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/glitchedmob/terraform-provider-outline/internal/client"
 	"github.com/google/uuid"
@@ -87,15 +88,29 @@ func validateCollectionUser(member *client.Membership, collection, user uuid.UUI
 	return nil
 }
 
+// membershipRefreshQuery keeps the freshly read name unchanged. Outline's
+// QueryHelper escapes SQL wildcard characters; the client must not escape them.
+// Invalid UTF-8, NUL, and blank names cannot provide a usable text query.
+func membershipRefreshQuery(name *string) *string {
+	if name == nil || !utf8.ValidString(*name) || strings.ContainsRune(*name, '\x00') || strings.TrimSpace(*name) == "" {
+		return nil
+	}
+	return name
+}
+
 // Only the full explicit collection-user list can prove pair absence. Group
 // grants, default permissions, and effective policies are different contracts.
 // Validate every page even after finding the target or a creator-admin grant.
 func (a *apiClient) readCollectionUserPages(ctx context.Context, collection, user uuid.UUID) (*client.Membership, error) {
+	return a.readCollectionUserQueryPages(ctx, collection, user, nil)
+}
+
+func (a *apiClient) readCollectionUserQueryPages(ctx context.Context, collection, user uuid.UUID, query *string) (*client.Membership, error) {
 	limit, offset, total := 100, 0, -1
 	seenUsers, seenGrants := make(map[uuid.UUID]bool), make(map[string]bool)
 	var match *client.Membership
 	for {
-		r, err := a.CollectionsMembershipsWithResponse(ctx, client.CollectionsMembershipsJSONRequestBody{Id: collection, Limit: &limit, Offset: &offset})
+		r, err := a.CollectionsMembershipsWithResponse(ctx, client.CollectionsMembershipsJSONRequestBody{Id: collection, Limit: &limit, Offset: &offset, Query: query})
 		if r == nil {
 			return nil, a.checkResponse("collections.memberships", nil, nil, err)
 		}
@@ -153,6 +168,16 @@ func (a *apiClient) readCollectionUserPages(ctx context.Context, collection, use
 }
 
 func (a *apiClient) observeCollectionUser(ctx context.Context, collection, user uuid.UUID) (*client.Membership, error) {
+	return a.observeCollectionUserWithRefresh(ctx, collection, user, false)
+}
+
+// Refresh accepts an exact UUID match after validating the entire name-filtered
+// result. Unlike mutation/import observations, it need not audit unrelated rows.
+func (a *apiClient) refreshCollectionUser(ctx context.Context, collection, user uuid.UUID) (*client.Membership, error) {
+	return a.observeCollectionUserWithRefresh(ctx, collection, user, true)
+}
+
+func (a *apiClient) observeCollectionUserWithRefresh(ctx context.Context, collection, user uuid.UUID, refresh bool) (*client.Membership, error) {
 	actor, err := a.requireIAMAdmin(ctx, "outline_collection_user")
 	if err != nil {
 		return nil, err
@@ -169,8 +194,18 @@ func (a *apiClient) observeCollectionUser(ctx context.Context, collection, user 
 	if err != nil {
 		return nil, err
 	}
-	if _, err = a.readUser(ctx, user); err != nil {
+	target, err := a.readUser(ctx, user)
+	if err != nil {
 		return nil, err
+	}
+	if refresh {
+		if query := membershipRefreshQuery(target.Name); query != nil {
+			member, err := a.readCollectionUserQueryPages(ctx, collection, user, query)
+			if err != nil || member != nil {
+				return member, err
+			}
+			// A valid filtered miss cannot prove absence after a concurrent rename.
+		}
 	}
 	return a.readCollectionUserPages(ctx, collection, user)
 }

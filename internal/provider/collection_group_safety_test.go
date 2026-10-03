@@ -47,7 +47,7 @@ func TestCollectionGroupExternalSynchronizedGroupsAllowedArchivedCollectionsRefu
 						groupTestEncode(t, w, map[string]any{"ok": true, "status": 200, "data": group})
 					case "/api/collections.group_memberships":
 						lists++
-						cgUnitOffset(t, w, req)
+						cgUnitOffset(t, w, req, grantTestReadQuery(operation, group.Name))
 						page := cgUnitEnvelope(members, 0, len(members), false)
 						if len(members) > 0 {
 							page["data"].(map[string]any)["groups"] = []client.Group{group}

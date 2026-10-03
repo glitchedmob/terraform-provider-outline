@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -23,6 +24,7 @@ func TestGroupMemberPartialCreateTerraformRecovery(t *testing.T) {
 	const address = "outline_group_member.test"
 	const id = groupTestID + "/" + userTestID
 	var mu sync.Mutex
+	var reading atomic.Bool
 	members := []client.GroupUser{}
 	adds, removes := 0, 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -37,7 +39,7 @@ func TestGroupMemberPartialCreateTerraformRecovery(t *testing.T) {
 		}
 		switch req.URL.Path {
 		case "/api/groups.memberships":
-			memberTestBody(t, w, req, map[string]any{"id": groupTestID, "limit": float64(100), "offset": float64(0)})
+			grantTestOffset(t, w, req, groupTestID, grantTestReadQueryFlag(reading.Load(), userTestUser().Name))
 			groupTestEncode(t, w, memberTestEnvelope(members, 0, len(members), false))
 		case "/api/groups.add_user":
 			memberTestBody(t, w, req, map[string]any{"id": groupTestID, "userId": userTestID, "permission": "admin"})
@@ -58,7 +60,7 @@ func TestGroupMemberPartialCreateTerraformRecovery(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 	const providerAddress = "registry.terraform.io/glitchedmob/outline"
-	reattach := groupPartialCreateProvider(t, providerAddress)
+	reattach := groupPartialCreateProvider(t, providerAddress, grantTestTrackReads(&reading))
 	tf := groupPartialCreateTerraform(t, fmt.Sprintf(`
 terraform {
   required_providers {
