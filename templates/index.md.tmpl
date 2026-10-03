@@ -54,7 +54,17 @@ The key is required. Explicit attributes override their environment variables, i
 
 The provider sends the API key as `Authorization: Bearer <api_key>` and marks `api_key` sensitive. Use HTTPS outside local development. Sensitive values still need protection in Terraform configuration and saved artifacts.
 
-Configuration validates local values and creates an HTTP client. It makes no API calls and does not verify server availability, permissions, or the key. Resources and data sources make requests through this client. Requests time out after 30 seconds by default; set `timeout_seconds` to change this. The client does not follow redirects or send credentials to another origin.
+Configuration validates local values and creates an HTTP client. It makes no API calls and does not verify server availability, permissions, or the key. Resources and data sources make requests through this client. Each HTTP attempt times out after 30 seconds by default, including pacing and response reads; set `timeout_seconds` to change this. The client does not follow redirects or send credentials to another origin.
+
+## Rate limits and errors
+
+Outline 1.10.1 limits `groups.create` to 10 requests per minute, `users.invite` to 50 per hour, `collections.add_user` to 100 per hour, and `users.delete` to 10 per hour before the resource mutation runs. Server multipliers and shared IP or credential quotas can change available capacity. Five-per-second pacing alone does not avoid these quotas.
+
+The provider retries only those four POST operations after the exact Outline `429 rate_limit_exceeded` envelope with `ok = false`, `status = 429`, and message `Rate limit exceeded for this operation`. It also requires JSON content type, a valid positive `Retry-After`, and consistent depleted-bucket quota headers. It accepts integer seconds or a future HTTP date, with at least a one-second wait. Unknown or proxy 429s, invalid headers, malformed responses, transport errors, timeouts, and 5xx responses never replay writes. Redirect and origin restrictions apply to every attempt.
+
+`rate_limit_wait_seconds` defaults to `120`, counting total quota waits for each API call. It is not a deadline for a Terraform resource operation or the whole apply. A normal 11-group batch can wait for the minute quota to reset. Hourly quotas normally fail immediately when their requested delay exceeds the remaining budget. Set `0` to disable retries and restore immediate 429 failures, or explicitly choose an integer through `3600` for a longer bounded wait. A budget-exhaustion diagnostic names this setting. Each API call also allows at most three retries, even with a larger wait budget. Retry-limit exhaustion requires waiting for the quota to reset before applying again. Other 429 diagnostics report `Retry-After` without treating it as proof that a manual retry is safe.
+
+Quota waits run outside the separate per-attempt `timeout_seconds` limit, so the default 30-second HTTP timeout does not cut off a valid 60-second wait. Context cancellation or a deadline can stop either sooner. Concurrent calls have separate wait budgets; configured provider instances keep separate clients, pacing, origins, keys, and retry settings. There is no shared quota cache or coordination with other Terraform processes. After any ambiguous write failure, inspect Outline and import or reconcile the existing object rather than blindly applying replacement.
 
 This provider is not published to the Terraform Registry yet. The example uses the intended source address for this repository.
 

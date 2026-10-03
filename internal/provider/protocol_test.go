@@ -36,15 +36,15 @@ func TestProtocol6Schema(t *testing.T) {
 			t.Fatalf("missing %s protocol registration", name)
 		}
 	}
-	if len(response.Provider.Block.Attributes) != 3 {
-		t.Fatal("expected three protocol provider attributes")
+	if len(response.Provider.Block.Attributes) != 4 {
+		t.Fatal("expected four protocol provider attributes")
 	}
 	for _, attribute := range response.Provider.Block.Attributes {
 		if !attribute.Optional || attribute.Required || attribute.Computed || attribute.Description == "" {
 			t.Fatalf("unexpected protocol attribute: %v", attribute)
 		}
 		wantType := tftypes.String
-		if attribute.Name == "timeout_seconds" {
+		if attribute.Name == "timeout_seconds" || attribute.Name == "rate_limit_wait_seconds" {
 			wantType = tftypes.Number
 		}
 		if !attribute.Type.Equal(wantType) || attribute.Sensitive != (attribute.Name == "api_key") {
