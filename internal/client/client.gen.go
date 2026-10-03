@@ -649,6 +649,27 @@ func (e UsersListJSONBodyFilter) Valid() bool {
 	}
 }
 
+// Defines values for UsersUpdateJSONBodyPreferencesSidebarSectionOrder.
+const (
+	Collections UsersUpdateJSONBodyPreferencesSidebarSectionOrder = "collections"
+	Shared      UsersUpdateJSONBodyPreferencesSidebarSectionOrder = "shared"
+	Starred     UsersUpdateJSONBodyPreferencesSidebarSectionOrder = "starred"
+)
+
+// Valid indicates whether the value is a known member of the UsersUpdateJSONBodyPreferencesSidebarSectionOrder enum.
+func (e UsersUpdateJSONBodyPreferencesSidebarSectionOrder) Valid() bool {
+	switch e {
+	case Collections:
+		return true
+	case Shared:
+		return true
+	case Starred:
+		return true
+	default:
+		return false
+	}
+}
+
 // Ability A single permission granted by a policy
 //
 // Example: true
@@ -1528,6 +1549,23 @@ type UsersSuspendJSONBody struct {
 	Id openapi_types.UUID `json:"id"`
 }
 
+// UsersUpdateJSONBody defines parameters for UsersUpdate.
+type UsersUpdateJSONBody struct {
+	AvatarUrl *string            `json:"avatarUrl,omitempty"`
+	Id        openapi_types.UUID `json:"id"`
+	Language  *string            `json:"language,omitempty"`
+	Name      *string            `json:"name,omitempty"`
+
+	// Preferences User-level preference flags. Only the fields supplied are updated; existing values for other preferences are preserved.
+	Preferences *struct {
+		// SidebarSectionOrder The order in which the top-level sections appear in the sidebar of the app UI.
+		SidebarSectionOrder *[]UsersUpdateJSONBodyPreferencesSidebarSectionOrder `json:"sidebarSectionOrder,omitempty"`
+	} `json:"preferences,omitempty"`
+}
+
+// UsersUpdateJSONBodyPreferencesSidebarSectionOrder defines parameters for UsersUpdate.
+type UsersUpdateJSONBodyPreferencesSidebarSectionOrder string
+
 // UsersUpdateRoleJSONBody defines parameters for UsersUpdateRole.
 type UsersUpdateRoleJSONBody struct {
 	// Id Unique identifier for the user.
@@ -1612,6 +1650,9 @@ type UsersListJSONRequestBody UsersListJSONBody
 
 // UsersSuspendJSONRequestBody defines body for UsersSuspend for application/json ContentType.
 type UsersSuspendJSONRequestBody UsersSuspendJSONBody
+
+// UsersUpdateJSONRequestBody defines body for UsersUpdate for application/json ContentType.
+type UsersUpdateJSONRequestBody UsersUpdateJSONBody
 
 // UsersUpdateRoleJSONRequestBody defines body for UsersUpdateRole for application/json ContentType.
 type UsersUpdateRoleJSONRequestBody UsersUpdateRoleJSONBody
@@ -2474,6 +2515,24 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /users.suspend (the `UsersSuspend` operationId).
 	UsersSuspend(ctx context.Context, body UsersSuspendJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UsersUpdateWithBody Update a user
+	//
+	// Update a users name or avatar. If no `id` is passed then the user associated with the authentication will be updated by default.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /users.update (the `UsersUpdate` operationId).
+	UsersUpdateWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UsersUpdate Update a user
+	//
+	// Update a users name or avatar. If no `id` is passed then the user associated with the authentication will be updated by default.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /users.update (the `UsersUpdate` operationId).
+	UsersUpdate(ctx context.Context, body UsersUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// UsersUpdateRoleWithBody Change a users role
 	//
@@ -3489,6 +3548,44 @@ func (c *Client) UsersSuspendWithBody(ctx context.Context, contentType string, b
 // Corresponds with POST /users.suspend (the `UsersSuspend` operationId).
 func (c *Client) UsersSuspend(ctx context.Context, body UsersSuspendJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewUsersSuspendRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UsersUpdateWithBody Update a user
+//
+// Update a users name or avatar. If no `id` is passed then the user associated with the authentication will be updated by default.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /users.update (the `UsersUpdate` operationId).
+func (c *Client) UsersUpdateWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUsersUpdateRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UsersUpdate Update a user
+//
+// Update a users name or avatar. If no `id` is passed then the user associated with the authentication will be updated by default.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /users.update (the `UsersUpdate` operationId).
+func (c *Client) UsersUpdate(ctx context.Context, body UsersUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUsersUpdateRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4604,6 +4701,46 @@ func NewUsersSuspendRequestWithBody(server string, contentType string, body io.R
 	return req, nil
 }
 
+// NewUsersUpdateRequest calls the generic UsersUpdate builder with application/json body
+func NewUsersUpdateRequest(server string, body UsersUpdateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewUsersUpdateRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewUsersUpdateRequestWithBody constructs an http.Request for the UsersUpdate method, with any body, and a specified content type
+func NewUsersUpdateRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/users.update")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewUsersUpdateRoleRequest calls the generic UsersUpdateRole builder with application/json body
 func NewUsersUpdateRoleRequest(server string, body UsersUpdateRoleJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -5164,6 +5301,24 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /users.suspend (the `UsersSuspend` operationId).
 	UsersSuspendWithResponse(ctx context.Context, body UsersSuspendJSONRequestBody, reqEditors ...RequestEditorFn) (*UsersSuspendResponse, error)
+
+	// UsersUpdateWithBodyWithResponse Update a user
+	//
+	// Update a users name or avatar. If no `id` is passed then the user associated with the authentication will be updated by default.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /users.update (the `UsersUpdate` operationId).
+	UsersUpdateWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UsersUpdateResponse, error)
+
+	// UsersUpdateWithResponse Update a user
+	//
+	// Update a users name or avatar. If no `id` is passed then the user associated with the authentication will be updated by default.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /users.update (the `UsersUpdate` operationId).
+	UsersUpdateWithResponse(ctx context.Context, body UsersUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*UsersUpdateResponse, error)
 
 	// UsersUpdateRoleWithBodyWithResponse Change a users role
 	//
@@ -7681,6 +7836,95 @@ func (r UsersSuspendResponse) ContentType() string {
 	return ""
 }
 
+// UsersUpdateResponse429Headers the declared response headers of an HTTP 429 response for UsersUpdate
+type UsersUpdateResponse429Headers struct {
+	RateLimitLimit     *int
+	RateLimitRemaining *int
+	RateLimitReset     *string
+	RetryAfter         *int
+}
+
+type UsersUpdateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *struct {
+		Data     *User     `json:"data,omitempty"`
+		Ok       *bool     `json:"ok,omitempty"`
+		Policies *[]Policy `json:"policies,omitempty"`
+		Status   *int      `json:"status,omitempty"`
+	}
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthenticated
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Unauthorized
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+	// JSON429 the response for an HTTP 429 `application/json` response
+	JSON429 *RateLimited
+	// Headers429 the parsed response headers for an HTTP 429 response
+	Headers429 *UsersUpdateResponse429Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r UsersUpdateResponse) GetJSON200() *struct {
+	Data     *User     `json:"data,omitempty"`
+	Ok       *bool     `json:"ok,omitempty"`
+	Policies *[]Policy `json:"policies,omitempty"`
+	Status   *int      `json:"status,omitempty"`
+} {
+	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r UsersUpdateResponse) GetJSON401() *Unauthenticated {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r UsersUpdateResponse) GetJSON403() *Unauthorized {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r UsersUpdateResponse) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetJSON429 returns the response for an HTTP 429 `application/json` response
+func (r UsersUpdateResponse) GetJSON429() *RateLimited {
+	return r.JSON429
+}
+
+// GetBody returns the raw response body bytes
+func (r UsersUpdateResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r UsersUpdateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UsersUpdateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r UsersUpdateResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 // UsersUpdateRoleResponse429Headers the declared response headers of an HTTP 429 response for UsersUpdateRole
 type UsersUpdateRoleResponse429Headers struct {
 	RateLimitLimit     *int
@@ -8563,6 +8807,36 @@ func (c *ClientWithResponses) UsersSuspendWithResponse(ctx context.Context, body
 		return nil, err
 	}
 	return ParseUsersSuspendResponse(rsp)
+}
+
+// UsersUpdateWithBodyWithResponse Update a user
+//
+// Update a users name or avatar. If no `id` is passed then the user associated with the authentication will be updated by default.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /users.update (the `UsersUpdate` operationId).
+func (c *ClientWithResponses) UsersUpdateWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UsersUpdateResponse, error) {
+	rsp, err := c.UsersUpdateWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUsersUpdateResponse(rsp)
+}
+
+// UsersUpdateWithResponse Update a user
+//
+// Update a users name or avatar. If no `id` is passed then the user associated with the authentication will be updated by default.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /users.update (the `UsersUpdate` operationId).
+func (c *ClientWithResponses) UsersUpdateWithResponse(ctx context.Context, body UsersUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*UsersUpdateResponse, error) {
+	rsp, err := c.UsersUpdate(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUsersUpdateResponse(rsp)
 }
 
 // UsersUpdateRoleWithBodyWithResponse Change a users role
@@ -11133,6 +11407,99 @@ func ParseUsersSuspendResponse(rsp *http.Response) (*UsersSuspendResponse, error
 	switch {
 	case rsp.StatusCode == 429:
 		var headers UsersSuspendResponse429Headers
+		if values := rsp.Header.Values("RateLimit-Limit"); len(values) > 0 {
+			var value int
+			if err := runtime.BindStyledParameterWithOptions("simple", "RateLimit-Limit", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.RateLimitLimit = &value
+		}
+		if values := rsp.Header.Values("RateLimit-Remaining"); len(values) > 0 {
+			var value int
+			if err := runtime.BindStyledParameterWithOptions("simple", "RateLimit-Remaining", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.RateLimitRemaining = &value
+		}
+		if values := rsp.Header.Values("RateLimit-Reset"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "RateLimit-Reset", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.RateLimitReset = &value
+		}
+		if values := rsp.Header.Values("Retry-After"); len(values) > 0 {
+			var value int
+			if err := runtime.BindStyledParameterWithOptions("simple", "Retry-After", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.RetryAfter = &value
+		}
+		response.Headers429 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseUsersUpdateResponse parses an HTTP response from a UsersUpdateWithResponse call
+func ParseUsersUpdateResponse(rsp *http.Response) (*UsersUpdateResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UsersUpdateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Data     *User     `json:"data,omitempty"`
+			Ok       *bool     `json:"ok,omitempty"`
+			Policies *[]Policy `json:"policies,omitempty"`
+			Status   *int      `json:"status,omitempty"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthenticated
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest RateLimited
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON429 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 429:
+		var headers UsersUpdateResponse429Headers
 		if values := rsp.Header.Values("RateLimit-Limit"); len(values) > 0 {
 			var value int
 			if err := runtime.BindStyledParameterWithOptions("simple", "RateLimit-Limit", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "integer", Format: ""}); err != nil {

@@ -55,7 +55,7 @@ actions:
     description: The server returns total and nextPath as well as offset and limit.
     update:
       $ref: '#/components/schemas/PaginationResponse'
-  - target: $.paths['/auth.info','/users.list','/users.info','/users.invite','/users.update_role','/users.suspend','/users.activate','/users.delete','/groups.list','/groups.info','/groups.create','/groups.update','/groups.delete','/groups.memberships','/groups.add_user','/groups.remove_user','/groups.update_user','/collections.list','/collections.info','/collections.create','/collections.update','/collections.delete','/collections.memberships','/collections.add_user','/collections.remove_user','/collections.group_memberships','/collections.add_group','/collections.remove_group'].post.responses['200'].content['application/json'].schema.properties
+  - target: $.paths['/auth.info','/users.list','/users.info','/users.invite','/users.update','/users.update_role','/users.suspend','/users.activate','/users.delete','/groups.list','/groups.info','/groups.create','/groups.update','/groups.delete','/groups.memberships','/groups.add_user','/groups.remove_user','/groups.update_user','/collections.list','/collections.info','/collections.create','/collections.update','/collections.delete','/collections.memberships','/collections.add_user','/collections.remove_user','/collections.group_memberships','/collections.add_group','/collections.remove_group'].post.responses['200'].content['application/json'].schema.properties
     description: apiResponse.ts adds ok and status to every JSON response; success is only present on some mutations.
     update:
       ok: {type: boolean}
@@ -80,6 +80,12 @@ actions:
   - target: $.paths['/users.list'].post.requestBody.content['application/json'].schema.allOf[2].properties
     update:
       ids: {type: array, items: {type: string, format: uuid}, deprecated: true}
+  - target: $.paths['/users.update'].post.requestBody.content['application/json'].schema
+    description: UsersUpdateSchema supports an explicit target ID. Require it locally to prevent updating the API-key owner by omission.
+    update:
+      required: [id]
+      properties:
+        id: {type: string, format: uuid}
   - target: $.paths['/users.invite'].post.responses['200'].content['application/json'].schema.properties.data.properties
     description: userInviter returns existing invitations separately and does not return their users.
     update:

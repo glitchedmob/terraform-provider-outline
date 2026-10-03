@@ -10,6 +10,7 @@ output-options:
     - usersList
     - usersInfo
     - usersInvite
+    - usersUpdate
     - usersUpdateRole
     - usersSuspend
     - usersActivate

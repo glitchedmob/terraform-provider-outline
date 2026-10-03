@@ -23,8 +23,13 @@ func TestProtocol6Schema(t *testing.T) {
 	if len(response.Diagnostics) != 0 || response.Provider == nil || response.Provider.Block == nil {
 		t.Fatalf("unexpected protocol schema response: %v", response)
 	}
-	if len(response.ResourceSchemas) != 1 || response.ResourceSchemas["outline_group"] == nil || len(response.DataSourceSchemas) != 1 || response.DataSourceSchemas["outline_group"] == nil || len(response.Functions) != 0 || len(response.EphemeralResourceSchemas) != 0 {
-		t.Fatal("expected only the group resource and data source")
+	if len(response.ResourceSchemas) != 2 || len(response.DataSourceSchemas) != 2 || len(response.Functions) != 0 || len(response.EphemeralResourceSchemas) != 0 {
+		t.Fatal("expected only the group and user resources and data sources")
+	}
+	for _, name := range []string{"outline_group", "outline_user"} {
+		if response.ResourceSchemas[name] == nil || response.DataSourceSchemas[name] == nil {
+			t.Fatalf("missing %s protocol registration", name)
+		}
 	}
 	if len(response.Provider.Block.Attributes) != 3 {
 		t.Fatal("expected three protocol provider attributes")

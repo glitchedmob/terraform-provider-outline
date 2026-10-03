@@ -80,6 +80,18 @@ func TestGeneratedInviteContract(t *testing.T) {
 	}
 }
 
+func TestGeneratedUserUpdateIdentityContract(t *testing.T) {
+	t.Parallel()
+	assertJSON(t, client.UsersUpdateJSONRequestBody{Id: uuid.MustParse(userID), Name: ptr("Managed name")},
+		`{"id":"`+userID+`","name":"Managed name"}`)
+	assertJSON(t, client.UsersUpdateRoleJSONRequestBody{Id: uuid.MustParse(userID), Role: client.UserRoleGuest},
+		`{"id":"`+userID+`","role":"guest"}`)
+	response, err := client.ParseUsersUpdateResponse(fixture(http.StatusOK, `{"ok":true,"status":200,"data":{"id":"`+userID+`","email":"oidc@example.com","name":"Managed name","role":"member","isSuspended":false}}`))
+	if err != nil || response.JSON200 == nil || response.JSON200.Data == nil || response.JSON200.Data.Id == nil || response.JSON200.Data.Id.String() != userID || response.JSON200.Data.Name == nil || *response.JSON200.Data.Name != "Managed name" {
+		t.Fatalf("users.update lost explicit account identity: %v %v", response, err)
+	}
+}
+
 func TestGeneratedGroupContracts(t *testing.T) {
 	t.Parallel()
 	assertJSON(t, client.GroupsCreateJSONRequestBody{

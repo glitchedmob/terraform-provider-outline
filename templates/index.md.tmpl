@@ -7,10 +7,13 @@ description: |-
 
 # Outline provider
 
-The Outline provider manages manually maintained groups through the Outline HTTP API. It also looks up existing groups by UUID or exact name. The API contracts target Outline 1.10.1 only; compatibility with other releases is not claimed.
+The Outline provider manages workspace users and manually maintained groups through the Outline HTTP API. It looks up users by UUID or exact normalized email and groups by UUID or exact name. The API contracts target Outline 1.10.1 only; compatibility with other releases is not claimed.
 
 ## Resources and data sources
 
+- [User resource](https://registry.terraform.io/providers/glitchedmob/outline/latest/docs/resources/user), provisions pending accounts and manages role, optional name, and suspension; destroy suspends by default
+- [User data source](https://registry.terraform.io/providers/glitchedmob/outline/latest/docs/data-sources/user), reads by UUID or exact normalized email, including suspended accounts
+- [OIDC guide](https://registry.terraform.io/providers/glitchedmob/outline/latest/docs/guides/oidc), explains provisioning, import, recovery, and retention without passwords or an SSO handshake
 - [Group resource](https://registry.terraform.io/providers/glitchedmob/outline/latest/docs/resources/group), manages manual groups and rejects externally synchronized groups
 - [Group data source](https://registry.terraform.io/providers/glitchedmob/outline/latest/docs/data-sources/group), reads by UUID or exact, case-sensitive name
 

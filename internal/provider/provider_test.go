@@ -10,8 +10,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	providerschema "github.com/hashicorp/terraform-plugin-framework/provider/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
 )
@@ -49,8 +51,24 @@ func TestProviderSchema(t *testing.T) {
 	if !ok || !timeout.Optional || timeout.Required || timeout.Sensitive || len(timeout.Validators) != 1 || timeout.MarkdownDescription == "" {
 		t.Fatalf("unexpected timeout_seconds schema: %v", timeout)
 	}
-	if len(p.Resources(t.Context())) != 1 || len(p.DataSources(t.Context())) != 1 {
-		t.Fatal("expected the group resource and data source")
+	if len(p.Resources(t.Context())) != 2 || len(p.DataSources(t.Context())) != 2 {
+		t.Fatal("expected the group and user resources and data sources")
+	}
+	resources, dataSources := make(map[string]bool), make(map[string]bool)
+	for _, constructor := range p.Resources(t.Context()) {
+		var metadata resource.MetadataResponse
+		constructor().Metadata(t.Context(), resource.MetadataRequest{ProviderTypeName: "outline"}, &metadata)
+		resources[metadata.TypeName] = true
+	}
+	for _, constructor := range p.DataSources(t.Context()) {
+		var metadata datasource.MetadataResponse
+		constructor().Metadata(t.Context(), datasource.MetadataRequest{ProviderTypeName: "outline"}, &metadata)
+		dataSources[metadata.TypeName] = true
+	}
+	for _, name := range []string{"outline_group", "outline_user"} {
+		if !resources[name] || !dataSources[name] {
+			t.Fatalf("missing %s registration: resources=%v data sources=%v", name, resources, dataSources)
+		}
 	}
 }
 
