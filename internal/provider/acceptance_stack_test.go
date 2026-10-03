@@ -48,6 +48,11 @@ func newAcceptanceAPIWithOverrides(t *testing.T, overrides ...string) *acceptanc
 	t.Setenv("OUTLINE_API_KEY", "")
 	t.Setenv("OUTLINE_BASE_URL", "")
 	baseURL, key, container := startAcceptanceStack(t, overrides...)
+	return acceptanceAPIWithCredentials(t, baseURL, key, container)
+}
+
+func acceptanceAPIWithCredentials(t *testing.T, baseURL, key string, container testcontainers.Container) *acceptanceAPI {
+	t.Helper()
 	api, err := newAPIClient(baseURL, key, 30, "acceptance")
 	if err != nil {
 		t.Fatal(err)
@@ -64,7 +69,7 @@ provider "outline" {
 	}
 }
 
-func startAcceptanceStack(t *testing.T, overrides ...string) (string, string, testcontainers.Container) {
+func acceptanceLoopbackPort(t *testing.T) string {
 	t.Helper()
 	listener, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
@@ -74,19 +79,47 @@ func startAcceptanceStack(t *testing.T, overrides ...string) (string, string, te
 	if err := listener.Close(); err != nil {
 		t.Fatalf("release Outline test port: %s", err)
 	}
-	stackFiles := append([]string{"../../integration/compose.yml"}, overrides...)
-	stack, err := compose.NewDockerComposeWith(compose.WithStackFiles(stackFiles...))
+	return port
+}
+
+type acceptanceStackOptions struct {
+	overrides        []string
+	env              map[string]string
+	omitServiceLogs  bool
+	loopbackEndpoint bool
+}
+
+func startAcceptanceStack(t *testing.T, overrides ...string) (string, string, testcontainers.Container) {
+	t.Helper()
+	return startAcceptanceStackWithOptions(t, acceptanceStackOptions{overrides: overrides})
+}
+
+func startAcceptanceStackWithOptions(t *testing.T, options acceptanceStackOptions) (string, string, testcontainers.Container) {
+	t.Helper()
+	port := acceptanceLoopbackPort(t)
+	files := append([]string{"../../integration/compose.yml"}, options.overrides...)
+	stack, err := compose.NewDockerComposeWith(compose.WithStackFiles(files...))
 	if err != nil {
 		t.Fatalf("create Outline stack: %s", err)
 	}
-	stackEnv := map[string]string{"OUTLINE_TEST_PORT": port}
+	stackEnv := make(map[string]string, len(options.env)+2)
+	for name, value := range options.env {
+		stackEnv[name] = value
+	}
+	stackEnv["OUTLINE_TEST_PORT"] = port
 	if version := os.Getenv("OUTLINE_VERSION"); version != "" {
 		stackEnv["OUTLINE_VERSION"] = version
 	}
 	stack.WithEnv(stackEnv)
 	// Register before Up so failed and partially started stacks lose their volumes too.
 	t.Cleanup(func() {
-		captureAcceptanceLogs(t, stack)
+		if options.omitServiceLogs {
+			// Auth logs may contain codes, claims, and tokens. Retain no service
+			// logs for protected stacks, even on failure or partial startup.
+			t.Log("Stack service logs omitted to protect authentication secrets")
+		} else {
+			captureAcceptanceLogs(t, stack)
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
 		if err := stack.Down(ctx, compose.RemoveOrphans(true), compose.RemoveVolumes(true)); err != nil {
@@ -140,6 +173,11 @@ func startAcceptanceStack(t *testing.T, overrides ...string) (string, string, te
 	}
 	if fixture.APIKey == "" {
 		t.Fatal("Outline bootstrap fixture did not return an API key")
+	}
+	if options.loopbackEndpoint {
+		// Docker may report localhost. Match the Compose URL's 127.0.0.1
+		// hostname for browser cookies and callbacks.
+		endpoint = "http://127.0.0.1:" + port
 	}
 	return endpoint + "/api", fixture.APIKey, container
 }
