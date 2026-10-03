@@ -1,0 +1,9 @@
+# Only the rate-limit acceptance test opts in. Pagination stacks stay unchanged.
+services:
+  outline:
+    image: docker.getoutline.com/outlinewiki/outline:1.10.1
+    environment:
+      RATE_LIMITER_ENABLED: "true"
+      RATE_LIMITER_MULTIPLIER: "1"
+      RATE_LIMITER_REQUESTS: "1000"
+      RATE_LIMITER_DURATION_WINDOW: "60"

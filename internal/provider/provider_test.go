@@ -38,8 +38,8 @@ func TestProviderSchema(t *testing.T) {
 	if diags := response.Schema.ValidateImplementation(t.Context()); diags.HasError() {
 		t.Fatal(diags)
 	}
-	if len(response.Schema.Attributes) != 3 || len(response.Schema.Blocks) != 0 {
-		t.Fatal("expected three provider attributes and no blocks")
+	if len(response.Schema.Attributes) != 4 || len(response.Schema.Blocks) != 0 {
+		t.Fatal("expected four provider attributes and no blocks")
 	}
 	for _, name := range []string{"base_url", "api_key"} {
 		attribute, ok := response.Schema.Attributes[name].(providerschema.StringAttribute)
@@ -115,8 +115,13 @@ func TestProviderConfigure(t *testing.T) {
 			values: map[string]any{"timeout_seconds": tftypes.UnknownValue}, envKey: "environment-key",
 			wantError: "Unknown Outline Timeout",
 		},
-		"missing key":           {wantError: "set api_key or OUTLINE_API_KEY"},
-		"blank environment key": {envKey: " \t ", wantError: "set api_key or OUTLINE_API_KEY"},
+		"disabled retries":          {values: map[string]any{"rate_limit_wait_seconds": 0}, envKey: "environment-key", wantURL: defaultBaseURL, wantKey: "environment-key", wantTimeout: 30 * time.Second},
+		"maximum retry budget":      {values: map[string]any{"rate_limit_wait_seconds": 3600}, envKey: "environment-key", wantURL: defaultBaseURL, wantKey: "environment-key", wantTimeout: 30 * time.Second},
+		"unknown rate limit wait":   {values: map[string]any{"rate_limit_wait_seconds": tftypes.UnknownValue}, envKey: "environment-key", wantError: "Unknown Outline Rate Limit Wait"},
+		"negative rate limit wait":  {values: map[string]any{"rate_limit_wait_seconds": -1}, envKey: "environment-key", wantError: "rate_limit_wait_seconds must be between"},
+		"excessive rate limit wait": {values: map[string]any{"rate_limit_wait_seconds": 3601}, envKey: "environment-key", wantError: "rate_limit_wait_seconds must be between"},
+		"missing key":               {wantError: "set api_key or OUTLINE_API_KEY"},
+		"blank environment key":     {envKey: " \t ", wantError: "set api_key or OUTLINE_API_KEY"},
 		"empty explicit key does not use environment": {
 			values: map[string]any{"api_key": ""}, envKey: "environment-key", wantError: "set api_key or OUTLINE_API_KEY",
 		},
@@ -176,6 +181,13 @@ func TestProviderConfigure(t *testing.T) {
 			if client.baseURL != test.wantURL || client.httpClient.Timeout != test.wantTimeout {
 				t.Fatalf("unexpected client URL or timeout: %q, %v", client.baseURL, client.httpClient.Timeout)
 			}
+			wantBudget := 120 * time.Second
+			if configured, ok := test.values["rate_limit_wait_seconds"].(int); ok {
+				wantBudget = time.Duration(configured) * time.Second
+			}
+			if client.rateLimits.budget != wantBudget {
+				t.Fatalf("unexpected rate limit wait budget: %s", client.rateLimits.budget)
+			}
 			transport, ok := client.httpClient.Transport.(*bearerTransport)
 			if !ok || transport.apiKey != test.wantKey || transport.userAgent != "terraform-provider-outline/test" {
 				t.Fatal("unexpected bearer transport configuration")
@@ -211,7 +223,7 @@ func testProviderConfig(t *testing.T, p provider.Provider, values map[string]any
 
 func testProviderConfigValue(values map[string]any) tftypes.Value {
 	attributeTypes := map[string]tftypes.Type{
-		"base_url": tftypes.String, "api_key": tftypes.String, "timeout_seconds": tftypes.Number,
+		"base_url": tftypes.String, "api_key": tftypes.String, "timeout_seconds": tftypes.Number, "rate_limit_wait_seconds": tftypes.Number,
 	}
 	attributes := make(map[string]tftypes.Value, len(attributeTypes))
 	for name, attributeType := range attributeTypes {

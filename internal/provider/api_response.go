@@ -19,6 +19,11 @@ var errNotFound = errors.New("outline object not found")
 // absence candidate; callers must verify their endpoint's missing-object contract.
 func (a *apiClient) checkResponse(operation string, response *http.Response, body []byte, requestErr error) error {
 	if requestErr != nil {
+		for _, limitErr := range []error{errRateLimitWaitBudget, errRateLimitRetryLimit} {
+			if errors.Is(requestErr, limitErr) {
+				return fmt.Errorf("%s: %w", operation, limitErr)
+			}
+		}
 		if errors.Is(requestErr, context.Canceled) {
 			return fmt.Errorf("%s: request canceled", operation)
 		}
@@ -53,12 +58,13 @@ func (a *apiClient) checkResponse(operation string, response *http.Response, bod
 		detail = detail[:512]
 	}
 	if response.StatusCode == http.StatusTooManyRequests {
-		// Never replay a write. Tell the caller when the server permits another request.
+		// The bounded retry wrapper declined this response. Preserve the header
+		// as a hint, not proof that another write is safe.
 		retry := strings.ReplaceAll(response.Header.Get("Retry-After"), a.apiKey, "[REDACTED]")
 		if len(retry) > 64 {
 			retry = retry[:64]
 		}
-		return fmt.Errorf("%s: HTTP 429 rate limited; Retry-After=%q; no automatic retry. %s", operation, retry, detail)
+		return fmt.Errorf("%s: HTTP 429 rate limited; Retry-After=%q; no automatic retry for this response. %s", operation, retry, detail)
 	}
 	return fmt.Errorf("%s: HTTP %d %s: %s", operation, response.StatusCode, http.StatusText(response.StatusCode), detail)
 }
