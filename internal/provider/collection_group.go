@@ -104,7 +104,7 @@ func (a *apiClient) readCollectionGroupQueryPages(ctx context.Context, collectio
 		}
 		if err = a.checkResponse("collections.group_memberships", r.HTTPResponse, r.Body, err); err != nil {
 			// No grant endpoint error is a completed empty list or parent absence.
-			return nil, errors.New(err.Error())
+			return nil, err
 		}
 		if r.JSON200 == nil || r.JSON200.Data == nil || r.JSON200.Data.GroupMemberships == nil || r.JSON200.Data.Groups == nil {
 			return nil, errors.New("collections.group_memberships: missing JSON groupMemberships or groups data")
@@ -209,7 +209,7 @@ func (a *apiClient) writeCollectionGroup(ctx context.Context, collection, group 
 	}
 	if err = a.checkResponse("collections.add_group", r.HTTPResponse, r.Body, err); err != nil {
 		// Grant mutation 404s do not establish parent absence either.
-		return nil, errors.New(err.Error())
+		return nil, err
 	}
 	if r.JSON200 == nil || r.JSON200.Data == nil || r.JSON200.Data.GroupMemberships == nil || len(*r.JSON200.Data.GroupMemberships) != 1 {
 		return nil, errors.New("collections.add_group: expected exactly one groupMemberships grant")
@@ -240,7 +240,7 @@ func (a *apiClient) removeCollectionGroup(ctx context.Context, collection, group
 		if requestErr != nil || r.StatusCode() != http.StatusBadRequest || absent == nil || absent.Ok == nil || *absent.Ok ||
 			absent.Status == nil || *absent.Status != http.StatusBadRequest || absent.Error == nil || *absent.Error != "invalid_request" ||
 			absent.Message == nil || *absent.Message != "This Group is not a part of the collection" {
-			return errors.New(err.Error())
+			return err
 		}
 	} else {
 		if r.JSON200 == nil || r.JSON200.Success == nil || !*r.JSON200.Success {

@@ -97,7 +97,7 @@ func (a *apiClient) readGroupMemberQueryPages(ctx context.Context, group, user u
 		}
 		if err = a.checkResponse("groups.memberships", r.HTTPResponse, r.Body, err); err != nil {
 			// An endpoint error, including 403 or 404, is not a completed empty list.
-			return nil, errors.New(err.Error())
+			return nil, err
 		}
 		if r.JSON200 == nil || r.JSON200.Data == nil || r.JSON200.Data.GroupMemberships == nil || r.JSON200.Data.Users == nil {
 			return nil, errors.New("groups.memberships: missing JSON membership or users data")

@@ -331,11 +331,7 @@ func TestCollectionUserUserParentAbsenceNeedsCompleteAllUsersList(t *testing.T) 
 						if evidence == "present early" || evidence == "present late" {
 							// A suspended user in the full list is present. Keep
 							// the original forbidden/not-found diagnostic.
-							if status == http.StatusForbidden {
-								groupTestDiagnostics(t, diagnostics, "HTTP 403")
-							} else {
-								groupTestDiagnostics(t, diagnostics, "users.info: outline object not found")
-							}
+							groupTestDiagnostics(t, diagnostics, fmt.Sprintf("HTTP %d", status))
 						}
 					}
 					wantOffsets := []int{0, 100}
