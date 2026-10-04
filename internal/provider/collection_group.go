@@ -94,11 +94,12 @@ func (a *apiClient) readCollectionGroupPages(ctx context.Context, collection, gr
 }
 
 func (a *apiClient) readCollectionGroupQueryPages(ctx context.Context, collection, group uuid.UUID, query *string) (*client.GroupMembership, error) {
-	limit, offset, total := 100, 0, -1
+	limit := 100
+	var pagination paginationState
 	seenGroups, seenGrants := make(map[uuid.UUID]bool), make(map[string]bool)
 	var match *client.GroupMembership
 	for {
-		r, err := a.CollectionsGroupMembershipsWithResponse(ctx, client.CollectionsGroupMembershipsJSONRequestBody{Id: collection, Limit: &limit, Offset: &offset, Query: query})
+		r, err := a.CollectionsGroupMembershipsWithResponse(ctx, client.CollectionsGroupMembershipsJSONRequestBody{Id: collection, Limit: &limit, Offset: &pagination.offset, Query: query})
 		if r == nil {
 			return nil, a.checkResponse("collections.group_memberships", nil, nil, err)
 		}
@@ -143,18 +144,13 @@ func (a *apiClient) readCollectionGroupQueryPages(ctx context.Context, collectio
 				match = member
 			}
 		}
-		next, more, err := nextOffset(page.Pagination, offset, len(members))
+		more, err := pagination.advance(page.Pagination, len(members))
 		if err != nil {
 			return nil, fmt.Errorf("collections.group_memberships: %w", err)
 		}
-		if total != -1 && total != *page.Pagination.Total {
-			return nil, errors.New("collections.group_memberships: total changed during pagination; retry when the list is stable")
-		}
-		total = *page.Pagination.Total
 		if !more {
 			return match, nil
 		}
-		offset = next
 	}
 }
 

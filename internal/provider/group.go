@@ -134,11 +134,11 @@ func (a *apiClient) updateGroup(ctx context.Context, id uuid.UUID, model groupMo
 }
 
 func (a *apiClient) walkGroups(ctx context.Context, visit func(*client.Group) error) error {
-	limit, offset := 100, 0
-	total := -1
+	limit := 100
+	var pagination paginationState
 	seen := make(map[uuid.UUID]bool)
 	for {
-		response, err := a.GroupsListWithResponse(ctx, client.GroupsListJSONRequestBody{Limit: &limit, Offset: &offset})
+		response, err := a.GroupsListWithResponse(ctx, client.GroupsListJSONRequestBody{Limit: &limit, Offset: &pagination.offset})
 		if response == nil {
 			return a.checkResponse("groups.list", nil, nil, err)
 		}
@@ -167,18 +167,13 @@ func (a *apiClient) walkGroups(ctx context.Context, visit func(*client.Group) er
 				return err
 			}
 		}
-		next, more, err := nextOffset(page.Pagination, offset, len(*page.Data.Groups))
+		more, err := pagination.advance(page.Pagination, len(*page.Data.Groups))
 		if err != nil {
 			return fmt.Errorf("groups.list: %w", err)
 		}
-		if total != -1 && total != *page.Pagination.Total {
-			return errors.New("groups.list: total changed during pagination; retry lookup when the list is stable")
-		}
-		total = *page.Pagination.Total
 		if !more {
 			return nil
 		}
-		offset = next
 	}
 }
 

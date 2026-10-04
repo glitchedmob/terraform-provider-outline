@@ -87,11 +87,12 @@ func (a *apiClient) readGroupMemberPages(ctx context.Context, group, user uuid.U
 }
 
 func (a *apiClient) readGroupMemberQueryPages(ctx context.Context, group, user uuid.UUID, query *string) (*client.GroupUser, error) {
-	limit, offset, total := 100, 0, -1
+	limit := 100
+	var pagination paginationState
 	seen := make(map[uuid.UUID]bool)
 	var match *client.GroupUser
 	for {
-		r, err := a.GroupsMembershipsWithResponse(ctx, client.GroupsMembershipsJSONRequestBody{Id: group, Limit: &limit, Offset: &offset, Query: query})
+		r, err := a.GroupsMembershipsWithResponse(ctx, client.GroupsMembershipsJSONRequestBody{Id: group, Limit: &limit, Offset: &pagination.offset, Query: query})
 		if r == nil {
 			return nil, a.checkResponse("groups.memberships", nil, nil, err)
 		}
@@ -133,18 +134,13 @@ func (a *apiClient) readGroupMemberQueryPages(ctx context.Context, group, user u
 				match = member
 			}
 		}
-		next, more, err := nextOffset(page.Pagination, offset, len(members))
+		more, err := pagination.advance(page.Pagination, len(members))
 		if err != nil {
 			return nil, fmt.Errorf("groups.memberships: %w", err)
 		}
-		if total != -1 && total != *page.Pagination.Total {
-			return nil, errors.New("groups.memberships: total changed during pagination; retry when the list is stable")
-		}
-		total = *page.Pagination.Total
 		if !more {
 			return match, nil
 		}
-		offset = next
 	}
 }
 
