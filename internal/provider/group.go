@@ -80,9 +80,6 @@ func (a *apiClient) readGroup(ctx context.Context, id uuid.UUID) (*client.Group,
 		// v1.10.1 authorizes a nil Group and returns authorization_error for a
 		// deleted ID. Neither a 403 nor an unexpected route/proxy 404 proves
 		// absence. Confirm admin identity and the complete workspace list.
-		if errors.Is(err, errNotFound) {
-			err = errors.New(err.Error())
-		}
 		forbidden := response.StatusCode() == http.StatusForbidden && response.JSON403 != nil && response.JSON403.Error != nil && *response.JSON403.Error == "authorization_error"
 		if requestErr == nil && (response.StatusCode() == http.StatusNotFound || forbidden) {
 			absent, verifyErr := a.confirmGroupAbsent(ctx, id)

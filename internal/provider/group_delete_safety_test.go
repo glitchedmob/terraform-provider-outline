@@ -3,8 +3,12 @@
 package provider
 
 import (
+	"context"
+	"errors"
+	"io"
 	"net/http"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/glitchedmob/terraform-provider-outline/internal/client"
@@ -26,6 +30,7 @@ func TestGroupDelete404RequiresVerifiedAbsence(t *testing.T) {
 		{"non admin cannot prove absence", "member", "", 404, false},
 		{"malformed auth", "malformed", "", 404, false},
 		{"list denied", "admin", "denied", 404, false},
+		{"list route missing", "admin", "missing", 404, false},
 		{"list malformed", "admin", "malformed", 404, false},
 		{"pagination missing", "admin", "unprovable", 404, false},
 		{"malformed info", "", "", 200, false},
@@ -77,6 +82,9 @@ func TestGroupDelete404RequiresVerifiedAbsence(t *testing.T) {
 					case "denied":
 						w.WriteHeader(http.StatusForbidden)
 						groupTestWrite(t, w, `{}`)
+					case "missing":
+						w.WriteHeader(http.StatusNotFound)
+						groupTestWrite(t, w, `{}`)
 					case "unprovable":
 						groupTestWrite(t, w, `{"ok":true,"data":{"groups":[]}}`)
 					default:
@@ -104,6 +112,58 @@ func TestGroupDelete404RequiresVerifiedAbsence(t *testing.T) {
 			}
 			if !reflect.DeepEqual(calls, want) {
 				t.Fatalf("delete repeated or absence not independently verified: %v, want %v", calls, want)
+			}
+		})
+	}
+}
+
+// Inject failures at the generated client's HTTP boundary without bypassing its
+// decoder. Even a 404 response cannot override request or body-decoding errors.
+type groupDeleteFailureClient struct {
+	client.ClientInterface
+	response *http.Response
+	err      error
+}
+
+func (c groupDeleteFailureClient) GroupsDelete(context.Context, client.GroupsDeleteJSONRequestBody, ...client.RequestEditorFn) (*http.Response, error) {
+	return c.response, c.err
+}
+
+func TestGroupDeleteRequestAndDecodeErrorsRetainState(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, body string
+		status     int
+		requestErr error
+	}{
+		{"nil response with transport error", "", 0, errors.New("transport " + groupTestKey)},
+		{"404 with request error", `{}`, 404, errors.New("request " + groupTestKey)},
+		{"404 with malformed JSON", `{"message":"` + groupTestKey, 404, nil},
+		{"404 with wrong error type", `{"error":42}`, 404, nil},
+		{"200 with malformed JSON", `{`, 200, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			infos := 0
+			r := &groupResource{api: groupTestClient(t, func(w http.ResponseWriter, req *http.Request) {
+				if req.URL.Path != "/api/groups.info" {
+					t.Errorf("failure must not verify or list: %s", req.URL.Path)
+				}
+				infos++
+				groupTestEncode(t, w, groupTestEnvelope(groupTestGroup()))
+			})}
+			var httpResponse *http.Response
+			if tc.status != 0 {
+				httpResponse = &http.Response{StatusCode: tc.status, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(tc.body))}
+				t.Cleanup(func() { _ = httpResponse.Body.Close() })
+			}
+			r.api.ClientInterface = groupDeleteFailureClient{r.api.ClientInterface, httpResponse, tc.requestErr}
+			state := tfsdk.State(groupTestPlan(t, r, groupTestModel()))
+			response := resource.DeleteResponse{State: state}
+			r.Delete(t.Context(), resource.DeleteRequest{State: state}, &response)
+			groupTestDiagnostics(t, response.Diagnostics, "request failed or response could not be decoded")
+			if !response.State.Raw.Equal(state.Raw) || infos != 1 {
+				t.Fatalf("request/decode failure authorized absence or verification: %v, infos=%d", response.Diagnostics, infos)
 			}
 		})
 	}

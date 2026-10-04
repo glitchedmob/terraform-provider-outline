@@ -13,10 +13,12 @@ import (
 	"github.com/glitchedmob/terraform-provider-outline/internal/client"
 )
 
+// errNotFound means verified object absence, never just an HTTP 404. Only
+// endpoint helpers that satisfy the release-specific absence contract may wrap it.
 var errNotFound = errors.New("outline object not found")
 
-// HTTP errors are not Go errors in the generated client. A 404 yields an
-// absence candidate; callers must verify their endpoint's missing-object contract.
+// HTTP errors are not Go errors in the generated client. Keep them ordinary
+// errors until an endpoint helper verifies the release-specific absence contract.
 func (a *apiClient) checkResponse(operation string, response *http.Response, body []byte, requestErr error) error {
 	if requestErr != nil {
 		for _, limitErr := range []error{errRateLimitWaitBudget, errRateLimitRetryLimit} {
@@ -38,9 +40,6 @@ func (a *apiClient) checkResponse(operation string, response *http.Response, bod
 	}
 	if response.StatusCode == http.StatusOK {
 		return nil
-	}
-	if response.StatusCode == http.StatusNotFound {
-		return fmt.Errorf("%s: %w", operation, errNotFound)
 	}
 	detail := ""
 	var apiError client.Error

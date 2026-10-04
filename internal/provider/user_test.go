@@ -1327,8 +1327,8 @@ func TestUserHTTPErrorHandling(t *testing.T) {
 				case "delete":
 					err = api.deleteUser(t.Context(), current)
 				}
-				if err == nil || writes.Load() != 1 || strings.Contains(err.Error(), groupTestKey) {
-					t.Fatalf("HTTP error accepted, replayed, or leaked token: %v calls=%d", err, writes.Load())
+				if err == nil || errors.Is(err, errNotFound) || writes.Load() != 1 || strings.Contains(err.Error(), groupTestKey) {
+					t.Fatalf("HTTP error accepted as absence, replayed, or leaked token: %v calls=%d", err, writes.Load())
 				}
 				if status == 429 && (!strings.Contains(err.Error(), `Retry-After="7"`) || !strings.Contains(err.Error(), "no automatic retry")) {
 					t.Fatalf("missing retry guidance: %v", err)

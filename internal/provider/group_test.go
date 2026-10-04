@@ -484,13 +484,13 @@ func TestGroupHTTPStatusHandling(t *testing.T) {
 				if err == nil || group != nil || calls.Load() != wantCalls {
 					t.Fatalf("status accepted or write replayed: group=%v err=%v calls=%d", group, err, calls.Load())
 				}
-				if errors.Is(err, errNotFound) != (status == http.StatusNotFound && operation != "read") {
-					t.Fatalf("unexpected absence candidate: %v", err)
+				if errors.Is(err, errNotFound) {
+					t.Fatalf("raw HTTP error authorized absence: %v", err)
 				}
 				if strings.Contains(err.Error(), groupTestKey) {
 					t.Fatal("API error leaked bearer token")
 				}
-				if status != 404 && !strings.Contains(err.Error(), fmt.Sprintf("HTTP %d", status)) {
+				if !strings.Contains(err.Error(), fmt.Sprintf("HTTP %d", status)) {
 					t.Fatalf("missing HTTP status: %v", err)
 				}
 				if status == 429 && (!strings.Contains(err.Error(), `Retry-After="7"`) || !strings.Contains(err.Error(), "no automatic retry")) {
@@ -606,7 +606,7 @@ func groupTestAbsenceCases() []groupTestAbsenceCase {
 		{"wrong content type", `{"ok":true,"data":{"user":{"role":"admin"}}}`, "missing JSON", 200, "text/plain"},
 		{"unauthorized", `{"error":"authentication_error","message":"` + groupTestKey + `"}`, "HTTP 401", 401, ""},
 		{"forbidden", `{"error":"authorization_error"}`, "HTTP 403", 403, ""},
-		{"not found", `{}`, errNotFound.Error(), 404, ""},
+		{"not found", `{}`, "HTTP 404", 404, ""},
 		{"rate limited", `{}`, "HTTP 429", 429, ""},
 		{"server error", `{}`, "HTTP 500", 500, ""},
 	} {
@@ -623,7 +623,7 @@ func groupTestAbsenceCases() []groupTestAbsenceCase {
 		reply             groupTestAbsenceReply
 	}{
 		{"forbidden", "HTTP 403", groupTestAbsenceReply{status: 403, body: `{"error":"authorization_error","message":"` + groupTestKey + `"}`}},
-		{"not found", errNotFound.Error(), groupTestAbsenceReply{status: 404, body: `{}`}},
+		{"not found", "HTTP 404", groupTestAbsenceReply{status: 404, body: `{}`}},
 		{"rate limited", "HTTP 429", groupTestAbsenceReply{status: 429, body: `{}`}},
 		{"server error", "HTTP 500", groupTestAbsenceReply{status: 500, body: `{}`}},
 		{"malformed JSON", "could not be decoded", groupTestAbsenceReply{body: `{"secret":"` + groupTestKey + `",`}},
@@ -657,7 +657,7 @@ func groupTestAbsenceCases() []groupTestAbsenceCase {
 		reply             groupTestAbsenceReply
 	}{
 		{"forbidden", "HTTP 403", groupTestAbsenceReply{status: 403, body: `{"error":"authorization_error"}`}},
-		{"not found", errNotFound.Error(), groupTestAbsenceReply{status: 404, body: `{}`}},
+		{"not found", "HTTP 404", groupTestAbsenceReply{status: 404, body: `{}`}},
 		{"malformed JSON", "could not be decoded", groupTestAbsenceReply{body: `{`}},
 		{"wrong offset", "pagination", groupTestAbsenceReply{body: groupTestList([]client.Group{other}, 0, 100, 101)}},
 		{"missing pagination", "pagination", groupTestAbsenceReply{body: `{"ok":true,"data":{"groups":[]}}`}},

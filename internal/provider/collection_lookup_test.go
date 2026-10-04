@@ -205,7 +205,7 @@ func TestCollectionNameLookupRejectsMalformedLaterPages(t *testing.T) {
 		{"missing data", `{"ok":true}`, "missing collections data", 200},
 		{"null data", `{"ok":true,"data":null}`, "missing collections data", 200},
 		{"list forbidden", `{"ok":false,"status":403,"error":"authorization_error"}`, "HTTP 403", 403},
-		{"missing list route", `{"ok":false,"status":404,"error":"not_found"}`, "not found", 404},
+		{"missing list route", `{"ok":false,"status":404,"error":"not_found"}`, "HTTP 404", 404},
 		{"duplicate across pages", userTestJSON(t, collectionTestList([]client.Collection{*collectionTestCollection()}, 1, 1, 3)), "duplicate collection", 200},
 	}
 	for _, tc := range []struct {

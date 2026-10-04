@@ -95,7 +95,7 @@ func (a *apiClient) requireIAMAdmin(ctx context.Context, resourceName string) (*
 	}
 	if err = a.checkResponse("auth.info", response.HTTPResponse, response.Body, err); err != nil {
 		// Missing authentication endpoints do not prove a target user is absent.
-		return nil, errors.New(err.Error())
+		return nil, err
 	}
 	if response.JSON200 == nil || response.JSON200.Data == nil {
 		return nil, errors.New("auth.info: missing JSON user response")
@@ -131,9 +131,6 @@ func (a *apiClient) readUser(ctx context.Context, id uuid.UUID) (*client.User, e
 		// before presentation, returning 403 authorization_error, not 404.
 		// A proxy/route 404 is not a missing-user contract either. Require a
 		// complete admin-visible filter=all list for either absence candidate.
-		if errors.Is(err, errNotFound) {
-			err = errors.New(err.Error())
-		}
 		forbidden := response.StatusCode() == http.StatusForbidden && response.JSON403 != nil && response.JSON403.Error != nil && *response.JSON403.Error == "authorization_error"
 		if requestErr == nil && (response.StatusCode() == http.StatusNotFound || forbidden) {
 			found := false
@@ -180,7 +177,7 @@ func (a *apiClient) walkUsers(ctx context.Context, visit func(*client.User) erro
 		}
 		if err = a.checkResponse("users.list", response.HTTPResponse, response.Body, err); err != nil {
 			// A missing list endpoint is not a completed empty enumeration.
-			return errors.New(err.Error())
+			return err
 		}
 		if response.JSON200 == nil || response.JSON200.Data == nil {
 			return errors.New("users.list: missing JSON users response")

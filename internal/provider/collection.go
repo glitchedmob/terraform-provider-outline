@@ -170,13 +170,14 @@ func (a *apiClient) readCollection(ctx context.Context, id uuid.UUID) (*client.C
 	if response == nil {
 		return nil, a.checkResponse("collections.info", nil, nil, err)
 	}
+	requestErr := err
 	if err = a.checkResponse("collections.info", response.HTTPResponse, response.Body, err); err != nil {
 		// v1.10.1 uses rejectOnEmpty, unlike groups/users. Only a decoded Outline
 		// 404 not_found is absence. A 403 can name another workspace's existing
 		// collection. Even a complete admin workspace list cannot disprove that.
-		if errors.Is(err, errNotFound) && (response.JSON404 == nil || response.JSON404.Error == nil || *response.JSON404.Error != "not_found" ||
-			response.JSON404.Status == nil || *response.JSON404.Status != http.StatusNotFound || response.JSON404.Ok == nil || *response.JSON404.Ok) {
-			return nil, errors.New("collections.info: unverified HTTP 404; refusing to treat an inaccessible or unexpected response as absence")
+		if requestErr == nil && response.StatusCode() == http.StatusNotFound && response.JSON404 != nil && response.JSON404.Error != nil && *response.JSON404.Error == "not_found" &&
+			response.JSON404.Status != nil && *response.JSON404.Status == http.StatusNotFound && response.JSON404.Ok != nil && !*response.JSON404.Ok {
+			return nil, fmt.Errorf("collections.info: %w", errNotFound)
 		}
 		return nil, err
 	}
@@ -241,7 +242,7 @@ func (a *apiClient) walkCollections(ctx context.Context, visit func(*client.Coll
 		}
 		if err = a.checkResponse("collections.list", response.HTTPResponse, response.Body, err); err != nil {
 			// A missing list route never proves a collection absent.
-			return errors.New(err.Error())
+			return err
 		}
 		if response.JSON200 == nil || response.JSON200.Data == nil {
 			return errors.New("collections.list: missing collections data")

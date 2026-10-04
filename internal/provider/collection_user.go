@@ -116,7 +116,7 @@ func (a *apiClient) readCollectionUserQueryPages(ctx context.Context, collection
 		}
 		if err = a.checkResponse("collections.memberships", r.HTTPResponse, r.Body, err); err != nil {
 			// A grant-endpoint 400/403/404 is never verified parent absence.
-			return nil, errors.New(err.Error())
+			return nil, err
 		}
 		if r.JSON200 == nil || r.JSON200.Data == nil || r.JSON200.Data.Memberships == nil || r.JSON200.Data.Users == nil {
 			return nil, errors.New("collections.memberships: missing JSON memberships or users data")
@@ -221,7 +221,7 @@ func (a *apiClient) writeCollectionUser(ctx context.Context, collection, user uu
 		return nil, a.checkResponse("collections.add_user", nil, nil, err)
 	}
 	if err = a.checkResponse("collections.add_user", r.HTTPResponse, r.Body, err); err != nil {
-		return nil, errors.New(err.Error())
+		return nil, err
 	}
 	if r.JSON200 == nil || r.JSON200.Data == nil || r.JSON200.Data.Memberships == nil || len(*r.JSON200.Data.Memberships) != 1 ||
 		r.JSON200.Data.Users == nil || len(*r.JSON200.Data.Users) != 1 {
@@ -256,7 +256,7 @@ func (a *apiClient) removeCollectionUser(ctx context.Context, collection, user u
 		if requestErr != nil || r.StatusCode() != http.StatusBadRequest || absent == nil || absent.Ok == nil || *absent.Ok ||
 			absent.Status == nil || *absent.Status != http.StatusBadRequest || absent.Error == nil || *absent.Error != "invalid_request" ||
 			absent.Message == nil || *absent.Message != "User is not a collection member" {
-			return errors.New(err.Error())
+			return err
 		}
 	} else {
 		if r.JSON200 == nil || r.JSON200.Success == nil || !*r.JSON200.Success {
