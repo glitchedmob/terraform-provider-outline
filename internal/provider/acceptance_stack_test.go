@@ -17,7 +17,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
 	"github.com/testcontainers/testcontainers-go"
-	tcexec "github.com/testcontainers/testcontainers-go/exec"
 	"github.com/testcontainers/testcontainers-go/modules/compose"
 )
 
@@ -144,16 +143,13 @@ func startAcceptanceStackWithOptions(t *testing.T, options acceptanceStackOption
 		t.Fatalf("get Outline endpoint: %s", err)
 	}
 	const fixturePath = "/opt/outline/acceptance-bootstrap.cjs"
-	if err := container.CopyFileToContainer(ctx, "../../integration/bootstrap.cjs", fixturePath, 0o644); err != nil {
-		t.Fatalf("copy Outline bootstrap fixture: %s", err)
-	}
-	exitCode, output, err := container.Exec(ctx, []string{"node", fixturePath}, tcexec.Multiplexed())
-	if err != nil {
-		t.Fatalf("execute Outline bootstrap fixture: %s", err)
-	}
-	data, err := io.ReadAll(output)
-	if err != nil {
-		t.Fatalf("read Outline bootstrap fixture output: %s", err)
+	exitCode, data, failure := runAcceptanceFixture(ctx, container, "../../integration/bootstrap.cjs", fixturePath)
+	if failure != nil {
+		step := failure.step
+		if step == "read" {
+			t.Fatalf("read Outline bootstrap fixture output: %s", failure)
+		}
+		t.Fatalf("%s Outline bootstrap fixture: %s", step, failure)
 	}
 	if exitCode != 0 {
 		t.Fatalf("Outline bootstrap fixture exited %d:\n%s", exitCode, data)

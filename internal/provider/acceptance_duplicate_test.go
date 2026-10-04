@@ -6,13 +6,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	tcexec "github.com/testcontainers/testcontainers-go/exec"
 )
 
 // Only duplicate injection uses the ORM. All reads, pagination, and cleanup use
@@ -25,16 +23,13 @@ func (a *acceptanceAPI) acceptanceCreateDuplicateGroup(t *testing.T, sourceID st
 	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
 	defer cancel()
 	const fixturePath = "/opt/outline/acceptance-duplicate-group.cjs"
-	if err := a.container.CopyFileToContainer(ctx, "../../integration/duplicate-group.cjs", fixturePath, 0o644); err != nil {
-		return "", fmt.Errorf("copy Outline duplicate group fixture: %w", err)
-	}
-	exitCode, output, err := a.container.Exec(ctx, []string{"node", fixturePath, sourceID}, tcexec.Multiplexed())
-	if err != nil {
-		return "", fmt.Errorf("execute Outline duplicate group fixture: %w", err)
-	}
-	data, err := io.ReadAll(output)
-	if err != nil {
-		return "", fmt.Errorf("read Outline duplicate group fixture output: %w", err)
+	exitCode, data, failure := runAcceptanceFixture(ctx, a.container, "../../integration/duplicate-group.cjs", fixturePath, sourceID)
+	if failure != nil {
+		step := failure.step
+		if step == "read" {
+			return "", fmt.Errorf("read Outline duplicate group fixture output: %w", failure)
+		}
+		return "", fmt.Errorf("%s Outline duplicate group fixture: %w", step, failure)
 	}
 	if exitCode != 0 {
 		return "", fmt.Errorf("Outline duplicate group fixture exited %d:\n%s", exitCode, data)

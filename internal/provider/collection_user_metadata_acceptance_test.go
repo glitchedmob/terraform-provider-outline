@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -20,7 +19,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-exec/tfexec"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
-	tcexec "github.com/testcontainers/testcontainers-go/exec"
 )
 
 type acceptanceCollectionUserFixture struct {
@@ -36,16 +34,9 @@ func (a *acceptanceAPI) acceptanceCollectionUserFixtureMetadata(ctx context.Cont
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 	const path = "/opt/outline/acceptance-collection-user-fixture.cjs"
-	if err := a.container.CopyFileToContainer(ctx, "../../integration/collection-user-fixture.cjs", path, 0o644); err != nil {
-		return nil, err
-	}
-	code, output, err := a.container.Exec(ctx, []string{"node", path, action, id}, tcexec.Multiplexed())
-	if err != nil {
-		return nil, err
-	}
-	data, err := io.ReadAll(output)
-	if err != nil {
-		return nil, err
+	code, data, failure := runAcceptanceFixture(ctx, a.container, "../../integration/collection-user-fixture.cjs", path, action, id)
+	if failure != nil {
+		return nil, failure
 	}
 	if code != 0 {
 		return nil, fmt.Errorf("Outline collection user metadata fixture exited %d: %s", code, data)

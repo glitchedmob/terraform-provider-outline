@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -21,7 +20,6 @@ import (
 	"github.com/hashicorp/terraform-exec/tfexec"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/oapi-codegen/nullable"
-	tcexec "github.com/testcontainers/testcontainers-go/exec"
 )
 
 // Outline 1.10.1's collections.list excludes archives only when statusFilter
@@ -405,15 +403,9 @@ type acceptanceReleaseResourceState struct {
 // The archive action already copied this guarded script. Cleanup uses its own
 // context because testing cancels t.Context before running cleanup functions.
 func acceptanceReleaseRestore(ctx context.Context, api *acceptanceAPI, id string) error {
-	code, output, err := api.container.Exec(ctx, []string{
-		"node", "/opt/outline/acceptance-collection-fixture.cjs", "restore", id,
-	}, tcexec.Multiplexed())
-	if err != nil {
-		return err
-	}
-	data, err := io.ReadAll(output)
-	if err != nil {
-		return err
+	code, data, failure := execAcceptanceFixture(ctx, api.container, "/opt/outline/acceptance-collection-fixture.cjs", "restore", id)
+	if failure != nil {
+		return failure
 	}
 	if code != 0 {
 		return fmt.Errorf("restore fixture exited %d: %s", code, data)
