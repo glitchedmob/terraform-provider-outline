@@ -168,13 +168,14 @@ func (a *apiClient) walkUsers(ctx context.Context, visit func(*client.User) erro
 	if _, err := a.requireUserAdmin(ctx); err != nil {
 		return err
 	}
-	limit, offset, total := 100, 0, -1
+	limit := 100
+	var pagination paginationState
 	filter, sort, direction := client.All, "createdAt", client.UsersListJSONBodyDirection("ASC")
 	seen := make(map[uuid.UUID]bool)
 	for {
 		// The release supports filter=all, including suspended users for admins.
 		//nolint:staticcheck // This release-verified status filter includes all users.
-		response, err := a.UsersListWithResponse(ctx, client.UsersListJSONRequestBody{Limit: &limit, Offset: &offset, Filter: &filter, Sort: &sort, Direction: &direction})
+		response, err := a.UsersListWithResponse(ctx, client.UsersListJSONRequestBody{Limit: &limit, Offset: &pagination.offset, Filter: &filter, Sort: &sort, Direction: &direction})
 		if response == nil {
 			return a.checkResponse("users.list", nil, nil, err)
 		}
@@ -201,18 +202,13 @@ func (a *apiClient) walkUsers(ctx context.Context, visit func(*client.User) erro
 				return err
 			}
 		}
-		next, more, err := nextOffset(page.Pagination, offset, len(*page.Data))
+		more, err := pagination.advance(page.Pagination, len(*page.Data))
 		if err != nil {
 			return fmt.Errorf("users.list: %w", err)
 		}
-		if total != -1 && total != *page.Pagination.Total {
-			return errors.New("users.list: total changed during pagination; retry when the list is stable")
-		}
-		total = *page.Pagination.Total
 		if !more {
 			return nil
 		}
-		offset = next
 	}
 }
 

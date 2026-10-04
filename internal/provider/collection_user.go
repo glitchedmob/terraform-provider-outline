@@ -106,11 +106,12 @@ func (a *apiClient) readCollectionUserPages(ctx context.Context, collection, use
 }
 
 func (a *apiClient) readCollectionUserQueryPages(ctx context.Context, collection, user uuid.UUID, query *string) (*client.Membership, error) {
-	limit, offset, total := 100, 0, -1
+	limit := 100
+	var pagination paginationState
 	seenUsers, seenGrants := make(map[uuid.UUID]bool), make(map[string]bool)
 	var match *client.Membership
 	for {
-		r, err := a.CollectionsMembershipsWithResponse(ctx, client.CollectionsMembershipsJSONRequestBody{Id: collection, Limit: &limit, Offset: &offset, Query: query})
+		r, err := a.CollectionsMembershipsWithResponse(ctx, client.CollectionsMembershipsJSONRequestBody{Id: collection, Limit: &limit, Offset: &pagination.offset, Query: query})
 		if r == nil {
 			return nil, a.checkResponse("collections.memberships", nil, nil, err)
 		}
@@ -152,18 +153,13 @@ func (a *apiClient) readCollectionUserQueryPages(ctx context.Context, collection
 				match = member
 			}
 		}
-		next, more, err := nextOffset(page.Pagination, offset, len(members))
+		more, err := pagination.advance(page.Pagination, len(members))
 		if err != nil {
 			return nil, fmt.Errorf("collections.memberships: %w", err)
 		}
-		if total != -1 && total != *page.Pagination.Total {
-			return nil, errors.New("collections.memberships: total changed during pagination; retry when the list is stable")
-		}
-		total = *page.Pagination.Total
 		if !more {
 			return match, nil
 		}
-		offset = next
 	}
 }
 

@@ -225,16 +225,16 @@ func (a *apiClient) walkCollections(ctx context.Context, visit func(*client.Coll
 	if _, err := a.requireIAMAdmin(ctx, "outline_collection lookup"); err != nil {
 		return err
 	}
-	limit, offset, includeListOnly := 100, 0, true
+	limit, includeListOnly := 100, true
+	var pagination paginationState
 	// Explicit [] includes active AND archived records in v1.10.1. Omission
 	// excludes archives. Deleted records and other workspaces are never listed.
 	statuses := []client.CollectionStatus{}
-	total := -1
 	seen := make(map[uuid.UUID]bool)
 	for {
 		//nolint:staticcheck // The pinned release supports statusFilter; [] includes archives.
 		response, err := a.CollectionsListWithResponse(ctx, client.CollectionsListJSONRequestBody{
-			Limit: &limit, Offset: &offset, IncludeListOnly: &includeListOnly, StatusFilter: &statuses,
+			Limit: &limit, Offset: &pagination.offset, IncludeListOnly: &includeListOnly, StatusFilter: &statuses,
 		})
 		if response == nil {
 			return a.checkResponse("collections.list", nil, nil, err)
@@ -262,18 +262,13 @@ func (a *apiClient) walkCollections(ctx context.Context, visit func(*client.Coll
 				return err
 			}
 		}
-		next, more, err := nextOffset(page.Pagination, offset, len(*page.Data))
+		more, err := pagination.advance(page.Pagination, len(*page.Data))
 		if err != nil {
 			return fmt.Errorf("collections.list: %w", err)
 		}
-		if total != -1 && total != *page.Pagination.Total {
-			return errors.New("collections.list: total changed during pagination; retry lookup when the list is stable")
-		}
-		total = *page.Pagination.Total
 		if !more {
 			return nil
 		}
-		offset = next
 	}
 }
 
