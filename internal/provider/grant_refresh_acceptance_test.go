@@ -21,7 +21,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	tcexec "github.com/testcontainers/testcontainers-go/exec"
 )
 
 type grantRefreshPrincipal struct {
@@ -46,17 +45,12 @@ func runGrantRefreshFixture(t *testing.T, api *acceptanceAPI, action, collection
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(t.Context()), time.Minute)
 	defer cancel()
 	const fixturePath = "/opt/outline/acceptance-grant-refresh-fixture.cjs"
-	if err := api.container.CopyFileToContainer(ctx, "../../integration/grant-refresh-fixture.cjs", fixturePath, 0o644); err != nil {
-		t.Fatal(err)
+	code, data, failure := runAcceptanceFixture(ctx, api.container, "../../integration/grant-refresh-fixture.cjs", fixturePath, append([]string{action, collection, group}, target...)...)
+	if failure != nil && failure.step != "read" {
+		t.Fatal(failure)
 	}
-	command := append([]string{"node", fixturePath, action, collection, group}, target...)
-	code, output, err := api.container.Exec(ctx, command, tcexec.Multiplexed())
-	if err != nil {
-		t.Fatal(err)
-	}
-	data, err := io.ReadAll(output)
-	if err != nil || code != 0 {
-		t.Fatalf("grant refresh fixture exited %d: %s, %v", code, data, err)
+	if failure != nil || code != 0 {
+		t.Fatalf("grant refresh fixture exited %d: %s, %v", code, data, failure)
 	}
 	var result grantRefreshFixture
 	const marker = "OUTLINE_ACCEPTANCE_GRANT_REFRESH="

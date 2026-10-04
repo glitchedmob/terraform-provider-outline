@@ -22,23 +22,15 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
-	tcexec "github.com/testcontainers/testcontainers-go/exec"
 )
 
 func (a *acceptanceAPI) acceptanceCollectionGroupFixture(ctx context.Context, action, id string) error {
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 	const path = "/opt/outline/acceptance-collection-group-fixture.cjs"
-	if err := a.container.CopyFileToContainer(ctx, "../../integration/collection-group-fixture.cjs", path, 0o644); err != nil {
-		return err
-	}
-	code, output, err := a.container.Exec(ctx, []string{"node", path, action, id}, tcexec.Multiplexed())
-	if err != nil {
-		return err
-	}
-	data, err := io.ReadAll(output)
-	if err != nil {
-		return err
+	code, data, failure := runAcceptanceFixture(ctx, a.container, "../../integration/collection-group-fixture.cjs", path, action, id)
+	if failure != nil {
+		return failure
 	}
 	if code != 0 {
 		return fmt.Errorf("Outline collection group fixture exited %d: %s", code, data)

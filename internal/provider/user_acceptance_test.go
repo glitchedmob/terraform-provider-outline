@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -19,7 +18,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
-	tcexec "github.com/testcontainers/testcontainers-go/exec"
 )
 
 // These tests stop at pending workspace accounts. Activation changes suspension,
@@ -280,16 +278,9 @@ func (a *acceptanceAPI) acceptanceInspectUser(t *testing.T, id, action string) a
 	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
 	defer cancel()
 	const fixturePath = "/opt/outline/acceptance-user-fixture.cjs"
-	if err := a.container.CopyFileToContainer(ctx, "../../integration/user-fixture.cjs", fixturePath, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	exitCode, output, err := a.container.Exec(ctx, []string{"node", fixturePath, id, action}, tcexec.Multiplexed())
-	if err != nil {
-		t.Fatal(err)
-	}
-	data, err := io.ReadAll(output)
-	if err != nil {
-		t.Fatal(err)
+	exitCode, data, failure := runAcceptanceFixture(ctx, a.container, "../../integration/user-fixture.cjs", fixturePath, id, action)
+	if failure != nil {
+		t.Fatal(failure)
 	}
 	if exitCode != 0 {
 		t.Fatalf("Outline user fixture exited %d:\n%s", exitCode, data)

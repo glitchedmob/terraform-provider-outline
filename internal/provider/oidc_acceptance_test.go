@@ -19,7 +19,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
-	tcexec "github.com/testcontainers/testcontainers-go/exec"
 )
 
 type acceptanceOIDCObservation struct {
@@ -35,15 +34,18 @@ func (a *acceptanceAPI) acceptanceInspectOIDC(t *testing.T, id string) acceptanc
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 	const path = "/opt/outline/acceptance-oidc-inspect.cjs"
-	if err := a.container.CopyFileToContainer(ctx, "../../integration/oidc-inspect.cjs", path, 0o644); err != nil {
-		t.Fatal("copy read-only OIDC inspection fixture failed")
+	exit, data, failure := runAcceptanceFixture(ctx, a.container, "../../integration/oidc-inspect.cjs", path, id)
+	if failure != nil {
+		switch failure.step {
+		case "copy":
+			t.Fatal("copy read-only OIDC inspection fixture failed")
+		case "execute":
+			t.Fatal("execute read-only OIDC inspection fixture failed")
+		default:
+			t.Fatal("read-only OIDC inspection failed, output withheld")
+		}
 	}
-	exit, output, err := a.container.Exec(ctx, []string{"node", path, id}, tcexec.Multiplexed())
-	if err != nil {
-		t.Fatal("execute read-only OIDC inspection fixture failed")
-	}
-	data, err := io.ReadAll(output)
-	if err != nil || exit != 0 {
+	if exit != 0 {
 		t.Fatal("read-only OIDC inspection failed, output withheld")
 	}
 	const marker = "OUTLINE_ACCEPTANCE_OIDC="

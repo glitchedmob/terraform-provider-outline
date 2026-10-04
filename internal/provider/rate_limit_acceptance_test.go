@@ -24,7 +24,6 @@ import (
 	"github.com/glitchedmob/terraform-provider-outline/internal/client"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-exec/tfexec"
-	tcexec "github.com/testcontainers/testcontainers-go/exec"
 )
 
 type acceptanceQuota struct {
@@ -55,15 +54,14 @@ func acceptanceRateLimitSetup(t *testing.T, api *acceptanceAPI, action, operatio
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 	const path = "/opt/outline/acceptance-rate-limit.cjs"
-	if err := api.container.CopyFileToContainer(ctx, "../../integration/rate-limit-fixture.cjs", path, 0o644); err != nil {
-		t.Fatal(err)
+	code, data, failure := runAcceptanceFixture(ctx, api.container, "../../integration/rate-limit-fixture.cjs", path, action, operation)
+	if failure != nil && failure.step == "copy" {
+		t.Fatal(failure)
 	}
-	code, output, err := api.container.Exec(ctx, []string{"node", path, action, operation}, tcexec.Multiplexed())
-	if err != nil {
+	if failure != nil && failure.step == "execute" {
 		t.Fatal("execute guarded rate-limit fixture failed")
 	}
-	data, err := io.ReadAll(output)
-	if err != nil || code != 0 {
+	if failure != nil || code != 0 {
 		// Do not print arbitrary ORM/Redis output, which may contain credentials.
 		t.Fatalf("guarded rate-limit fixture failed: exit=%d", code)
 	}

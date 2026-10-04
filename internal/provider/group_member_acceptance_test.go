@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"reflect"
 	"regexp"
@@ -19,7 +18,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
-	tcexec "github.com/testcontainers/testcontainers-go/exec"
 )
 
 const acceptanceGroupMemberAddress = "outline_group_member.test"
@@ -589,20 +587,13 @@ func (a *acceptanceAPI) acceptanceGroupMemberSync(t *testing.T, groupID string, 
 	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
 	defer cancel()
 	const path = "/opt/outline/acceptance-group-member-fixture.cjs"
-	if err := a.container.CopyFileToContainer(ctx, "../../integration/group-member-fixture.cjs", path, 0o644); err != nil {
-		return err
-	}
 	action := "unsync"
 	if synced {
 		action = "sync"
 	}
-	exitCode, output, err := a.container.Exec(ctx, []string{"node", path, groupID, action}, tcexec.Multiplexed())
-	if err != nil {
-		return err
-	}
-	data, err := io.ReadAll(output)
-	if err != nil {
-		return err
+	exitCode, data, failure := runAcceptanceFixture(ctx, a.container, "../../integration/group-member-fixture.cjs", path, groupID, action)
+	if failure != nil {
+		return failure
 	}
 	if exitCode != 0 {
 		return fmt.Errorf("Outline group member fixture exited %d: %s", exitCode, data)

@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"reflect"
 	"regexp"
@@ -22,7 +21,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 	"github.com/oapi-codegen/nullable"
-	tcexec "github.com/testcontainers/testcontainers-go/exec"
 )
 
 const acceptanceCollectionAddress = "outline_collection.test"
@@ -559,16 +557,12 @@ func (a *acceptanceAPI) acceptanceCollectionFixture(t *testing.T, action, id str
 	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
 	defer cancel()
 	const path = "/opt/outline/acceptance-collection-fixture.cjs"
-	if err := a.container.CopyFileToContainer(ctx, "../../integration/collection-fixture.cjs", path, 0o644); err != nil {
-		t.Fatal(err)
+	code, data, failure := runAcceptanceFixture(ctx, a.container, "../../integration/collection-fixture.cjs", path, action, id)
+	if failure != nil && failure.step != "read" {
+		t.Fatal(failure)
 	}
-	code, output, err := a.container.Exec(ctx, []string{"node", path, action, id}, tcexec.Multiplexed())
-	if err != nil {
-		t.Fatal(err)
-	}
-	data, err := io.ReadAll(output)
-	if err != nil || code != 0 {
-		t.Fatalf("collection fixture exited %d: %v\n%s", code, err, data)
+	if failure != nil || code != 0 {
+		t.Fatalf("collection fixture exited %d: %v\n%s", code, failure, data)
 	}
 	const marker = "OUTLINE_ACCEPTANCE_COLLECTION="
 	for _, line := range strings.Split(string(data), "\n") {
